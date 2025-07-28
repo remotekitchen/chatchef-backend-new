@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Payout Summary</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				color: #333;
+				background-color: #f9f9f9;
+				margin: 0;
+				padding: 20px;
+			}
+			.email-container {
+				max-width: 600px;
+				margin: 0 auto;
+				background-color: #ffffff;
+				padding: 20px;
+				border: 1px solid #e5e5e5;
+				border-radius: 8px;
+			}
+			.email-header {
+				text-align: center;
+				margin-bottom: 20px;
+			}
+			.email-body {
+				line-height: 1.6;
+			}
+			.email-footer {
+				margin-top: 20px;
+				text-align: center;
+				font-size: 14px;
+				color: #888;
+			}
+			.email-footer p {
+				margin: 0;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="email-container">
+			<div class="email-header">
+				<h2>Payout Summary</h2>
+			</div>
+			<div class="email-body">
+				<p>Hi there,</p>
+
+				<p>I hope you’re doing well!</p>
+
+				<p>
+					Attached is your payout summary for
+					<strong>{{ start_date }}</strong> -
+					<strong>{{ end_date }}</strong>. If you have any questions
+					or need further information, just let me know.
+				</p>
+
+				<p>Thanks for your continued partnership!</p>
+
+				<p>Best Regards,<br />Chatchef Team</p>
+			</div>
+			<div class="email-footer">
+				<p>&copy; 2024 Chatchef. All rights reserved.</p>
+			</div>
+		</div>
+	</body>
+</html>

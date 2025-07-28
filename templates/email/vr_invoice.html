@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Invoice for {{ vr_name }}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        color: #333;
+        font-size: 15px;
+        background-color: #f9f9f9;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 600px;
+        background-color: #ffffff;
+        margin: 40px auto;
+        border: 1px solid #ddd;
+        padding: 20px;
+        border-radius: 4px;
+      }
+      h2 {
+        color: #444;
+      }
+      p {
+        line-height: 1.6;
+      }
+      ul {
+        list-style: none;
+        padding-left: 0;
+      }
+      ul li {
+        padding: 5px 0;
+      }
+      .footer {
+        margin-top: 20px;
+        font-size: 12px;
+        color: #777;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>VR Invoice Notification</h2>
+      <p>Dear Team,</p>
+      <p>Please find attached the VR invoice Excel file for your records.</p>
+      <ul>
+        <li><strong>VR Name:</strong> {{ vr_name }}</li>
+        <li><strong>Date Range:</strong> {{ start_date }} to {{ end_date }}</li>
+      </ul>
+      <p>
+        If you have any questions or require additional information, please do
+        not hesitate to reach out.
+      </p>
+      <p>
+        Regards,<br />
+        Your Company
+      </p>
+      <div class="footer">This is an automated email—please do not reply.</div>
+    </div>
+  </body>
+</html>

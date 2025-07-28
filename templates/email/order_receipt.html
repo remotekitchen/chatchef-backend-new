@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Order Receipt</title>
+		<style>
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				margin-bottom: 20px;
+			}
+			th,
+			td {
+				border: 1px solid #ddd;
+				padding: 8px;
+				text-align: left;
+			}
+			th {
+				background-color: #f4f4f4;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Thank you for your order, {{ user_name }}!</h1>
+		<p>
+			Your order <strong>#{{ order_id }}</strong> is currently
+			<strong>{{ order_status }}</strong>.
+		</p>
+		<p>Order Date: {{ order_date }}</p>
+
+		<h2>Order Details:</h2>
+		<table>
+			<thead>
+				<tr>
+					<th>Item</th>
+					<th>Quantity</th>
+					<th>Price</th>
+					<th>Modifiers</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for item in items %}
+				<tr>
+					<td>{{ item.name }}</td>
+					<td>{{ item.quantity }}</td>
+					<td>{{ item.base_price }} {{ currency }}</td>
+					<td>
+						{% if item.modifiers %}
+						<table>
+							<thead>
+								<tr>
+									<th>Group</th>
+									<th>Modifier</th>
+									<th>Quantity</th>
+									<th>Price</th>
+								</tr>
+							</thead>
+							<tbody>
+								{% for modifier in item.modifiers %} 
+								{% for mod_item in modifier.items %}
+								<tr>
+									<td>{{ modifier.group_name }}</td>
+									<td>{{ mod_item.name }}</td>
+									<td>{{ mod_item.quantity }}</td>
+									<td>{{ mod_item.price }} {{ currency }}</td>
+								</tr>
+								{% endfor %}
+								{% endfor %}
+							</tbody>
+						</table>
+						{% else %} No Modifiers {% endif %}
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+
+		<h3>Summary:</h3>
+		<table>
+			<tr>
+				<th>Subtotal</th>
+				<td>{{ subtotal }} {{ currency }}</td>
+			</tr>
+			<tr>
+				<th>Tax</th>
+				<td>{{ tax }} {{ currency }}</td>
+			</tr>
+			<tr>
+				<th>Delivery Fee</th>
+				<td>{{ delivery_fee }} {{ currency }}</td>
+			</tr>
+			<tr>
+				<th>Total</th>
+				<td><strong>{{ total }} {{ currency }}</strong></td>
+			</tr>
+		</table>
+
+		<h3>Delivery Information:</h3>
+		<table>
+			<tr>
+				<th>Pickup Address</th>
+				<td>{{ pickup_address }}</td>
+			</tr>
+			<tr>
+				<th>Dropoff Address</th>
+				<td>{{ dropoff_address }}</td>
+			</tr>
+			<tr>
+				<th></th>
+			</tr>
+		</table>
+	</body>
+</html>

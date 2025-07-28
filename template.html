@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Summary</title>
+</head>
+
+<body style="font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0;">
+
+  <!-- Container -->
+  <div style="max-width: 1600px; margin: 0 auto; padding: 20px;">
+
+    <!-- Header -->
+    <div style="text-align: center; margin-bottom: 20px;">
+      <h2 style="margin: 5px 0;">Orders Summary</h2>
+      <hr>
+      <div style="display: flex;align-items: center; justify-content: space-between;">
+        <!-- https://api.chatchefs.com/media/images/2024/08/20/logo_long.png -->
+        <img src="https://chatchef.nyc3.digitaloceanspaces.com/chatchef/logos/2025/07/10/techchef.png" alt="ChatChef Logo"
+          style="max-width: 200px;">
+        <div>
+          <p style="margin: 0;font-size: 14px; display: flex; justify-content: space-between; margin-top: 4px;">
+            Date:
+            <strong>{{date}}</strong>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment Information -->
+    <div style="margin-bottom: 10px;">
+      <p style="margin: 0; padding: 8px 0;background-color: #e0e0e0; font-size: 12px;"><strong>Pay to:</strong></p>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <p style="margin: 8px 0; font-size: 12px;">{{restaurant.name}}</p>
+          <p style="margin: 8px 0; font-size: 12px;">
+            {{location.address.street_number}} {{location.address.street_name}}
+            {{location.address.city}} {{location.address.zip}} {{location.address.country}}
+          </p>
+        </div>
+        <div style="text-align: right; font-size: 12px; margin: 8px 0;">
+          <strong>Sub-Total Payment:</strong><br>
+          Selling Price (inclusive of tax) - Delivery Fees - Stripe Fees - Service Fees to Chatchefs
+        </div>
+      </div>      
+      <div style=" padding: 10px 0;">
+        <p style="margin: 0; background-color: #e0e0e0; font-size: 12px;padding: 8px 0;"><strong>From:</strong></p>
+        <div style="font-size: 12px; margin-top: 6px;">
+          <p style="margin: 0;">Thunder Digital Kitchen Ltd</p>
+          <p style="margin-top: 6px;">200 - 13571 COMMERCE PKY, RICHMOND BC V6V 2R2, CANADA</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charges Table -->
+    {% for orders in orders_list %}
+    <div style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 12px;">
+
+        <tbody>
+          <tr style="background-color: #f4f4f4; text-align: left;">
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Order Date</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Order ID</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Item Price</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Discount</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Payment Type</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Order Mode</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Tax</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Selling Price<br>(Inclusive of
+              tax)</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Original Delivery Fees</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Customer absorb on delivery fees
+            </th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Delivery fees expense</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Stripe Fees</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Service fees to restaurant</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Service fees to chatchefs</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">tips for restaurant</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">bag fees</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">utensil fees</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Refund Amount</th>
+            <th style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Sub-Total Payment</th>
+          </tr>
+          {% for order in orders %}
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.date}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.order_id}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.item_price}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.discount}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.payment_type}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.order_mode}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.tax}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.selling_price}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.Original_Delivery_Fees}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.Customer_absorb_on_delivery_fees}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.Delivery_fees_expense}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.stripe_fees}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.service_fees_to_restaurant}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.service_fees_to_chatchefs}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.tips_for_restaurant}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.bag_fees}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.utensil_fees}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.refund_amount}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{{order.sub_total}}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+    <div>
+      <p style="text-align: right; margin-top: 10px; font-size: 16px;"><strong>${{total}}</strong></p>
+    </div>
+
+
+
+    <!-- Payment Summary -->
+    <div style="font-size: 12px; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Date</td>
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Comment</td>
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Sales through Pay-in-Person</td>
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Sales Through Stripe</td>
+
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Subtotal for Total Sales</td>
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Payment Deposited Confirmation
+              No.</td>
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Adjustment</td>
+
+            <td style="padding: 8px; border: 1px solid #ddd;background-color: #e0e0e0;">Amount</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;"></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">Stripe Payments Deposited</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${{cash}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${{stripe}}</td>
+
+            <td style="padding: 8px; border: 1px solid #ddd;">${{total}}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;"></td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${{adjustments}}</td>
+
+            <td style="padding: 8px; border: 1px solid #ddd;">${{stripe_with_adjustments}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+</body>
+
+</html>

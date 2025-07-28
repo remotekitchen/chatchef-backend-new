@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>conneting with otter</title>
+</head>
+<body>
+
+    {% if org.items %}
+        {% for item in org.items %}
+            <div>
+                org : {{item.id}}
+            name : {{item.name}}
+            <a href="{% url "otter-callback-stores" item.id  %}"> get stores</a>
+            </div>
+        {% endfor %}  
+    {% endif %}
+
+    {% if stores.items %}
+        {% for item in stores.items %}
+            <div>
+                store id : {{item.id}}
+            name : {{item.name}}
+            <a href="{% url "otter-callback-status" item.id  %}"> connection details</a>
+            </div>
+        {% endfor %}  
+    {% endif %}
+
+    {% if store %}
+        store id : {{store.id}}
+        name : {{store.name}}
+        {% if connected_status %}
+        <h5>connected with chatchef</h5>
+        <a href="{% url "otter-callback-delete" store.id  %}"> remove connection</a>       
+        {% else %}
+        <h5>not connected with chatchef</h5>
+        <a href="{% url "otter-callback-connect" store.id  %}"> connect stores</a>
+        {% endif %}
+    {% endif %}
+
+    {% if Connected %}
+        <h5>otter is connected</h5>
+        <h4>store id: {{otter_id}}</h4>
+        <h5>please add store id to chatchef restaurant. if you face any problem please contact our admin</h5>
+    {% endif %}
+
+    {% if connection_removed %}
+    <h5>connection removed</h5>
+    {% endif %}
+    
+</body>
+</html>

@@ -1,0 +1,107 @@
+[
+{
+    "model": "firebase.notificationtemplate",
+    "pk": 1,
+    "fields": {
+        "created_date": "2024-01-30T17:16:08.004Z",
+        "modified_date": "2024-01-30T17:16:08.004Z",
+        "key": "ORDER_STATUS",
+        "title": "ORDER STATUS",
+        "notification_title": "Your order has been updated to $status",
+        "notification_body": "Your order has been updated to $status",
+        "notification_image": null,
+        "click_action": "",
+        "data": {}
+    }
+},
+{
+    "model": "firebase.notificationtemplate",
+    "pk": 2,
+    "fields": {
+        "created_date": "2024-03-05T05:50:23.473Z",
+        "modified_date": "2024-03-05T05:50:23.473Z",
+        "key": "SCHEDULE_ORDER_RESTAURANT_NOTIFICATION",
+        "title": "SCHEDULE ORDER RESTAURANT NOTIFICATION",
+        "notification_title": "schedule order time",
+        "notification_body": "schedule order id $order_id",
+        "notification_image": null,
+        "click_action": "",
+        "data": {}
+    }
+},
+{
+    "model": "firebase.notificationtemplate",
+    "pk": 3,
+    "fields": {
+        "created_date": "2024-03-13T19:22:07.751Z",
+        "modified_date": "2024-03-13T19:22:07.751Z",
+        "key": "PICKUP_ORDER_PLACED_SMS",
+        "title": "PICKUP_ORDER_PLACED_SMS",
+        "notification_title": "Your order is placed at {restaurant_name}!",
+        "notification_body": "Hi {customer},\r\n\r\nYour order has been received! Your food will be ready for pick-up at {estimated_time} at {restaurant_name}. If you have any questions about your order, feel free to call us at {restaurant_phone}. \r\n\r\nThank you for choosing {restaurant_name}! See you soon.",
+        "notification_image": null,
+        "click_action": "",
+        "data": {}
+    }
+},
+{
+    "model": "firebase.notificationtemplate",
+    "pk": 4,
+    "fields": {
+        "created_date": "2024-03-13T19:24:47.207Z",
+        "modified_date": "2024-03-13T19:24:47.207Z",
+        "key": "PICKUP_ORDER_ACCEPTED_SMS",
+        "title": "PICKUP_ORDER_ACCEPTED_SMS",
+        "notification_title": "Your order is accepted!",
+        "notification_body": "Your food is ready for pick-up! You can collect it at {restaurant_name} located at {restaurant_address}. \r\n\r\nThank you for ordering from us. Enjoy your meal!",
+        "notification_image": null,
+        "click_action": "",
+        "data": {}
+    }
+},
+{
+    "model": "firebase.notificationtemplate",
+    "pk": 5,
+    "fields": {
+        "created_date": "2024-03-13T19:45:05.009Z",
+        "modified_date": "2024-03-13T21:09:13.044Z",
+        "key": "DELIVERY_ORDER_PLACED_SMS",
+        "title": "DELIVERY_ORDER_PLACED_SMS",
+        "notification_title": "Your order is placed!",
+        "notification_body": "Hi {customer},\r\n\r\nYour order has been received! If you have any questions about your order, feel free to call us at {restaurant_phone}. \r\n\r\nThank you for choosing {restaurant_name}! See you soon.",
+        "notification_image": null,
+        "click_action": "",
+        "data": {}
+    }
+},
+{
+    "model": "firebase.notificationtemplate",
+    "pk": 6,
+    "fields": {
+        "created_date": "2024-03-13T21:08:08.603Z",
+        "modified_date": "2024-03-13T21:08:08.603Z",
+        "key": "DELIVERY_ORDER_ACCEPTED_SMS",
+        "title": "DELIVERY_ORDER_ACCEPTED_SMS",
+        "notification_title": "DELIVERY_ORDER_ACCEPTED_SMS",
+        "notification_body": "Hi {customer},\r\n\r\nYour order has been accepted! Your food will be ready for delivery at {estimated_time}. Your dasher's number is {dasher_number}. If you have any delivery-related queries, please contact the dasher. For any issues with your order, call us at {restaurant_phone}.\r\nClick this link to track your order on the map: {tracking_link}.\r\n\r\nThank you for choosing {restaurant_name}! Enjoy your meal.",
+        "notification_image": null,
+        "click_action": "",
+        "data": {}
+    }
+},
+{
+    "model": "firebase.notificationtemplate",
+    "pk": 7,
+    "fields": {
+        "created_date": "2024-03-14T17:47:01.237Z",
+        "modified_date": "2024-03-14T17:47:01.237Z",
+        "key": "ORDER_CANCEL_SMS",
+        "title": "ORDER_CANCEL_SMS",
+        "notification_title": "ORDER_CANCEL_SMS",
+        "notification_body": "Dear {customer},\r\nWe regret to inform you that your order #{order_id} has been canceled due to unforeseen circumstances. We apologize for any inconvenience this may cause.\r\nFor any queries or assistance, please feel free to contact us at {restaurant_phone}. We appreciate your understanding.\r\nThank you,\r\n{restaurant_name}",
+        "notification_image": null,
+        "click_action": "",
+        "data": {}
+    }
+}
+]

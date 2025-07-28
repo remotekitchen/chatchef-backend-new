@@ -1,0 +1,2 @@
+class ConstantKeyValue:
+    pass
