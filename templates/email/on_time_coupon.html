@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>You've Earned a Reward</title>
+    <style>
+      body {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        background-color: #f9fafb;
+        margin: 0;
+        padding: 0;
+      }
+
+      .container {
+        max-width: 600px;
+        margin: 40px auto;
+        background: #ffffff;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+      }
+
+      .header {
+        text-align: center;
+        color: #10b981;
+      }
+
+      .highlight {
+        color: #ef4444;
+        font-weight: bold;
+      }
+
+      .coupon {
+        font-size: 24px;
+        font-weight: bold;
+        color: #1f2937;
+        background-color: #f3f4f6;
+        padding: 10px 20px;
+        border: 2px dashed #9ca3af;
+        display: inline-block;
+        margin: 10px 0;
+        border-radius: 6px;
+      }
+
+      .footer {
+        font-size: 14px;
+        color: #6b7280;
+        text-align: center;
+        margin-top: 30px;
+      }
+
+      .cta-button {
+        display: inline-block;
+        padding: 12px 24px;
+        margin-top: 20px;
+        background-color: #10b981;
+        color: #ffffff;
+        text-decoration: none;
+        font-weight: bold;
+        border-radius: 6px;
+      }
+
+      .cta-button:hover {
+        background-color: #059669;
+      }
+
+      @media only screen and (max-width: 600px) {
+        .container {
+          margin: 20px;
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2 class="header">You've Earned a Reward! 🎉</h2>
+      <p>Dear {{ user.get_full_name|default:user.email }},</p>
+
+      <p>
+        Thanks for your patience! Your recent order was delayed, and as a token
+        of apology, we've added a reward of
+        <span class="highlight">৳{{ discount_amount }}</span> to your account.
+      </p>
+
+      {% if coupon_code %}
+      <p>Your coupon code:</p>
+      <div class="coupon">{{ coupon_code }}</div>
+      {% endif %} {% if expiry_date %}
+      <p><strong>Expires:</strong> {{ expiry_date }}</p>
+      {% endif %}
+
+      <p>You can use this reward on your next order over ৳50.</p>
+
+      <div class="footer">
+        <p>Thank you for choosing HungryTiger 💛</p>
+        <p>&copy; {{ now.year }} HungryTiger. All rights reserved.</p>
+      </div>
+    </div>
+  </body>
+</html>

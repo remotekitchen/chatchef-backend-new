@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ginger Indian Cuisine - Thank You</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            width: 80%;
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #d35400;
+        }
+        .content {
+            text-align: left;
+        }
+        .content a {
+            color: #d35400;
+            text-decoration: none;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{restaurant.name}}</h1>
+        </div>
+        <div class="content">
+            <p>Dear Valued Customer,</p>
+            <p>Thank you for becoming one of our loyal customers! As a token of our appreciation, we're excited to offer you a <strong>10% off coupon</strong> for your first purchase on our website.</p>
+            <p>Redeem your discount here: <a href="https://order.chatchefs.com/{{restaurant.slug}}/{{location.slug}}/menu?refer={{code}}" target="_blank">{{restaurant.name}}</a>.</p>
+            <p>Additionally, we now offer delivery starting at just <strong>$0.99 for up to 5km</strong> and <strong>$2.99 for up to 10km</strong>, so you can enjoy our delicious dishes conveniently at home.</p>
+            <p>Thank you for your continued support. We look forward to serving you soon!</p>
+            <p>Best regards,<br>{{restaurant.name}}</p>
+        </div>
+        
+    </div>
+</body>
+</html>

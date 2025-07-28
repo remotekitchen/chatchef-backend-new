@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	</head>
+	<body>
+		<section
+			style="
+				font-family: Arial, sans-serif;
+				color: #333;
+				line-height: 1.6;
+				padding: 20px;
+			"
+		>
+			<p style="font-size: 16px; color: #333">
+				Hi {{instance.user.first_name}},
+			</p>
+
+			<p style="font-size: 16px; color: #555">
+				We noticed it's been a while since your last order, and we’ve
+				been missing you at
+				<strong>{{instance.restaurant.name}}</strong>! To show you how
+				much we appreciate you, we’re offering you a special
+				<strong>{{ instance.amount|floatformat:"0" }}% discount</strong>
+				on your next order. Just use your unique coupon code below and
+				treat yourself to your favorite dishes.
+			</p>
+
+			<p
+				style="
+					font-size: 18px;
+					color: #333;
+					font-weight: bold;
+					text-align: center;
+				"
+			>
+				Your Exclusive Coupon Code:
+				<span
+					style="
+						background-color: #f0f0f0;
+						padding: 10px;
+						display: inline-block;
+						border-radius: 5px;
+					"
+					>{{instance.code}}</span
+				>
+			</p>
+
+			<p style="font-size: 16px; color: #555">
+				Use this code at checkout and enjoy
+				{{instance.amount|floatformat:"0"}}% off your next meal. Don’t
+				wait too long — this offer is valid for a limited time only!
+			</p>
+
+			<div style="text-align: center; margin: 20px 0">
+				<a
+					href="https://order.chatchefs.com/{{instance.restaurant.slug}}/{{instance.location.slug}}/menu"
+					style="
+						background-color: #28a745;
+						color: #ffffff;
+						padding: 15px 30px;
+						font-size: 16px;
+						font-weight: bold;
+						text-decoration: none;
+						border-radius: 5px;
+					"
+				>
+					Order Now
+				</a>
+			</div>
+
+			<p style="font-size: 16px; color: #555">
+				We look forward to serving you soon!
+			</p>
+
+			<p style="font-size: 16px; color: #333; font-weight: bold">
+				Best regards,<br />
+				{{instance.restaurant.name}}
+			</p>
+
+			<p
+				style="
+					font-size: 12px;
+					color: #888;
+					text-align: center;
+					border-top: 1px solid #ddd;
+					padding-top: 15px;
+					margin-top: 30px;
+				"
+			>
+				<em>Terms and Conditions apply.</em>
+			</p>
+		</section>
+	</body>
+</html>

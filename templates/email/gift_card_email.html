@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Gift Card</title>
+	</head>
+	<body>
+		<p>Hi {{ receiver_name }}!</p>
+		<p>
+			Your friend {{ sender_name }} has sent you a gift of ${{ amount }}.
+		</p>
+		<p>You can use it at {{ restaurant_name }}.</p>
+
+		{% if is_registered %}
+		<p>
+			We noticed that you’re already registered, so you’re all set to
+			enjoy your reward. Make sure to log in with the email
+			{{receiver_email }} to use the reward.
+		</p>
+		{% else %}
+		<p>
+			To access your reward, please complete your registration by signing
+			up with {{ receiver_email }}. Once registered, you'll be all set to
+			enjoy your gift!
+		</p>
+		{% endif %}
+
+		<p>Enjoy your gift!</p>
+	</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>connect third party application</title>
+</head>
+<body>
+    {% if connecting %}
+    <div>
+        <h1>Connecting with {{application.name}}</h1>
+        <a href="{% url "stores" %}">allow</a>
+    </div>
+    
+    {% endif %}
+
+    {% if stores %}
+    {% for store in stores %}
+
+    <div>
+        <h1>restaurant: {{store.name}}</h1>
+        <a href="{% url "connect-app" store.id %}">connect</a>
+    </div>
+    
+    {% endfor %}
+    
+    
+    {% endif %}
+
+    {% if onboarding %}
+    <div>
+        <h1>{{restaurant.name}} connected with {{application.name}}</h1>
+        <h1>store key: {{onboarding.store_key}}</h1>
+        <p>Please use this <strong>store key</strong> when working with the restaurant, such as importing menus, creating orders, etc.</p>
+    </div>
+    
+    
+    
+    {% endif %}
+</body>
+</html>

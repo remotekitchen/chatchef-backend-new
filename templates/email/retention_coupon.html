@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your Comeback Gift Awaits 🎁</title>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background-color: #f7f7f7;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #333;
+    "
+  >
+    <table
+      cellpadding="0"
+      cellspacing="0"
+      width="100%"
+      style="
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 24px;
+      "
+    >
+      <tr>
+        <td>
+          <h2 style="margin-top: 0; font-weight: normal">
+            Hello {{ user.first_name|default:"there" }},
+          </h2>
+
+          <p style="font-size: 16px; line-height: 1.5">
+            We noticed you haven’t ordered in a while, so here’s something
+            special to welcome you back.
+          </p>
+
+          <p style="font-size: 16px; line-height: 1.5">
+            Enjoy <strong>৳{{ discount_amount }} OFF</strong> your next meal
+            when you spend at least <strong>৳{{ minimum_spend }}</strong>.
+          </p>
+
+          <p style="font-size: 16px; line-height: 1.5">
+            Your exclusive coupon code:
+          </p>
+
+          <div
+            style="
+              background-color: #f4f4f4;
+              padding: 14px 20px;
+              border-radius: 4px;
+              display: inline-block;
+              font-size: 18px;
+              letter-spacing: 1px;
+              font-weight: bold;
+            "
+          >
+            {{ coupon_code }}
+          </div>
+
+          <p style="font-size: 16px; line-height: 1.5; margin-top: 20px">
+            This code is valid for <strong>3 days only</strong> and can be used
+            once. Don’t miss out!
+          </p>
+
+          <p style="font-size: 16px; line-height: 1.5; margin-top: 32px">
+            <br />
+            💛 The HungryTiger Team
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

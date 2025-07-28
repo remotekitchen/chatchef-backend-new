@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Review Feedback</title>
+	</head>
+	<body>
+		<p>Dear {{ customer_name }},</p>
+		<p>
+			Thank you for your feedback. We’re truly sorry to hear that your
+			recent experience didn’t meet your expectations. At {{
+			restaurant_name }}, we strive to provide high-quality food and
+			timely service, and it’s disappointing to know we fell short this
+			time.
+		</p>
+		<p>
+			Due to this, we’re giving you a coupon for your next order:
+			<strong>{{ coupon_code }}</strong> for 30% off.
+		</p>
+		<p>
+			Please be assured that we’re taking your feedback seriously. If
+			possible, we’d appreciate it if you could withdraw the feedback.
+			We’ll review what went wrong with your order to ensure it doesn’t
+			happen again.
+		</p>
+		<p>Warm regards,<br />The {{ restaurant_name }} Team</p>
+	</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Invoice Summary</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				color: #333;
+				background-color: #f9fafb;
+				margin: 0;
+				padding: 0;
+			}
+			.container {
+				border-redius: 5px;
+			}
+			.header {
+				max-width: 600px;
+				margin: 0 auto;
+				padding: 20px;
+				background-color: #42c2ff;
+				border-top-left-radius: 5px;
+				border-top-right-radius: 5px;
+			}
+			.summery {
+				max-width: 600px;
+				margin: 0 auto;
+				padding: 20px;
+				background-color: #f5f5f5f5;
+				box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+			}
+			.details {
+				padding: 20px;
+				background-color: #fff;
+				box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+				border: 1px solid #42c2ff;
+				border-style: dotted;
+				border-radius: 5px;
+			}
+			.border {
+				border: 1px solid #42c2ff;
+				margin-top: 10px;
+				border-style: dotted;
+			}
+			.order_volume td {
+				padding: 10px;
+				vertical-align: top;
+			}
+
+			.btn {
+				background-color: #42c2ff;
+				color: #fff;
+				padding: 10px 20px;
+				border: none;
+				border-radius: 5px;
+				cursor: pointer;
+				margin-top: 20px;
+				color: white;
+			}
+			a {
+				text-decoration: none;
+				color: white;
+			}
+			.earning {
+				color: #42c2ff;
+				margin: 0;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div class="container">
+			<div class="header">
+				<img
+					src="https://api.chatchefs.com/media/images/2024/08/20/logo_long.png"
+					alt="ChatChef Logo"
+					style="max-width: 300px"
+				/>
+				<h2 class="text">{{restaurant_name}}</h2>
+				<h1 class="period">
+					{{statement_start_date}} - {{statement_end_date}}
+				</h1>
+			</div>
+			<div class="summery">
+				<div class="details">
+					<h2 class="earning">Earnings Summery</h2>
+					<h3>Gross Sales</h3>
+					<h2>${{gross_revenue}}</h2>
+					<div class="border"></div>
+					<table
+						class="order_volume"
+						role="presentation"
+						width="100%"
+						cellspacing="0"
+						cellpadding="0"
+					>
+						<tr>
+							<td width="50%" style="padding: 10px">
+								<p>Total order volume</p>
+								<p>{{ total_order_volume }}</p>
+							</td>
+							<td width="50%" style="padding: 10px">
+								<p>Average ticket size</p>
+								<p>${{ average_ticket_size }}</p>
+							</td>
+						</tr>
+					</table>
+
+					<button class="btn">
+						<a href="{{invoice_link}}">Visit Merchant Portal</a>
+					</button>
+				</div>
+				<p>ⓒ2024 Chatchef</p>
+				<p>Phone: (236) 239-6111</p>
+				<p>13571 Commerce Pkwy #200, Richmond,</p>
+				<p>BC V6V 2R2, Canada</p>
+			</div>
+		</div>
+	</body>
+</html>
