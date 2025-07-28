@@ -429,4 +429,4 @@ pip-selfcheck.json
 
 
 # static files
-static/
+static/logs/debug.log*
