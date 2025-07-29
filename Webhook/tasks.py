@@ -5,7 +5,7 @@ from django_celery_beat.models import ClockedSchedule, PeriodicTask
 
 from billing.clients.doordash_client import DoordashClient
 from billing.models import Order
-from chatchef.celery import app
+from hungrytiger.celery import app
 from core.utils import get_logger
 
 logger = get_logger()

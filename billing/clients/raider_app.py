@@ -4,7 +4,7 @@ import requests
 
 from billing.api.base.serializers import BaseRaiderAppCheckAddressSerializer
 from billing.models import Order, RaiderAppAuth
-from chatchef.settings import env
+from hungrytiger.settings import env
 from food.models import Restaurant, Location
 from datetime import timedelta
 from datetime import datetime

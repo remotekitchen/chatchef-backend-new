@@ -10,7 +10,7 @@ from billing.models import (BillingProfile, DeliveryFeeAssociation, Invoice,
                             StripeConnectAccount, Transactions, Wallet)
 from billing.utilities.check_bogo import check_bogo
 from billing.utilities.check_bogo import check_bxgy
-from chatchef.settings.defaults import ENV_TYPE
+from hungrytiger.settings.defaults import ENV_TYPE
 from core.api.serializers import BaseSerializer
 from core.models import Address
 from core.utils import get_logger

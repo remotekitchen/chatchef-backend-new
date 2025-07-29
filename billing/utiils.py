@@ -15,7 +15,7 @@ from django.utils.timezone import now
 from accounts.models import Contacts, RestaurantUser, User
 from billing.clients.paypal_client import PaypalClient
 from billing.models import Order, Transactions, UberAuthModel, Wallet
-from chatchef.settings import env
+from hungrytiger.settings import env
 from food.models import Restaurant
 from billing.models import UnregisteredGiftCard
 from datetime import datetime, timedelta, timezone

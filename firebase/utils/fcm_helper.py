@@ -5,7 +5,7 @@ import requests
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 
-from chatchef.settings import BASE_DIR, FIREBASE_SERVICE_ACCOUNT_FILE, env
+from hungrytiger.settings import BASE_DIR, FIREBASE_SERVICE_ACCOUNT_FILE, env
 from core.utils import get_logger
 from firebase.models import NotificationTemplate, TokenFCM
 from firebase_admin.messaging import Message, Notification, send

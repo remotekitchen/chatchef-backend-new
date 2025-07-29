@@ -1,4 +1,4 @@
-from chatchef.settings import env
+from hungrytiger.settings import env
 
 # waht's app Api credentials
 Twilo = {

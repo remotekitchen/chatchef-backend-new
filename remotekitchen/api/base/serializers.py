@@ -4,7 +4,7 @@ import requests
 from rest_framework import serializers
 
 from billing.models import RestaurantFee
-from chatchef.settings.defaults import mapbox_api_key
+from hungrytiger.settings.defaults import mapbox_api_key
 from food.api.base.serializers import (BaseRestaurantGETSerializer,
                                        TimeTableModelSerializer, BaseRestaurantSerializer, BaseLocationSerializer)
 from food.models import Restaurant, TimeTable, Location, VisitHistory, ItemVisitHistorySingle,RemoteKitchenCuisine

@@ -27,7 +27,7 @@ from billing.api.base.serializers import (
 from django.utils.timezone import make_aware
 from reward.models import Reward, UserReward, LocalDeal
 from marketing.models import Voucher
-from chatchef.settings import ENV_TYPE, env
+from hungrytiger.settings import ENV_TYPE, env
 from datetime import datetime, timedelta
 from analytics.api.base.utils import create_visitor_analytics
 from marketing.utils.send_sms import send_sms_bd

@@ -23,7 +23,7 @@ from hotel.api.base.serializers import (HotelBaseSerializer, RoomTypeBaseSeriali
                                         SearchSuggestionSerializer,HotelPolicySerializer,RoomHourlyAvailabilitySerializer,
                                         BookingRoomItemSerializer,BookingRoomItemSimpleSerializer)
 from hotel.services.search import search_available_hotels
-from chatchef.settings.defaults import mapbox_api_key
+from hungrytiger.settings.defaults import mapbox_api_key
 from hotel.api.base.filters import HotelFilter
 from django.utils import timezone
 from datetime import datetime, date

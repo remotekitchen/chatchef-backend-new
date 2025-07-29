@@ -2,7 +2,7 @@ import json
 
 import requests
 
-from chatchef.settings import env
+from hungrytiger.settings import env
 from Webhook.models import OtterAuth
 
 

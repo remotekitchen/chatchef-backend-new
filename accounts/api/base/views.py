@@ -84,7 +84,7 @@ from django.http import HttpResponse
 import csv
 import uuid
 import stripe
-from chatchef.settings import env
+from hungrytiger.settings import env
 
 
 logger = get_logger()

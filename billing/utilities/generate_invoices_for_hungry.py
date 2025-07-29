@@ -13,7 +13,6 @@ from  billing.models import Bogo
 
 from billing.models import Order, PayoutHistoryForHungry, RestaurantContract
 from billing.utilities.generate_invoice_for_hungry_pdf import generate_pdf_for_hungry_invoice
-# from chatchef.settings.defaults import LOGO_PATH, LOGO_PATH_HUNGRY
 from food.models import Location
 from django.core.exceptions import FieldError
 import json

@@ -1,7 +1,7 @@
 import stripe
 
 from billing.models import Order, Purchase
-from chatchef.settings import env
+from hungrytiger.settings import env
 from core.utils import get_logger
 
 # stripe.api_key = env.str('STRIPE_API_KEY')

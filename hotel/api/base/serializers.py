@@ -9,7 +9,7 @@ from rest_framework.pagination import PageNumberPagination
 import logging
 from decimal import Decimal
 from django.core.cache import cache
-from chatchef.settings.defaults import mapbox_api_key
+from hungrytiger.settings.defaults import mapbox_api_key
 from collections import defaultdict
 from django.db.models import Max
 import hashlib

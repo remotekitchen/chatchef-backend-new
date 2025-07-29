@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from billing.models import Order, OrderItem
-from chatchef.settings.defaults import BASE_DIR
+from hungrytiger.settings.defaults import BASE_DIR
 from food.models import POS_DATA, Menu, MenuItem
 from pos.models import POS_logs, PosDetails
 

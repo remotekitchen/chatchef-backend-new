@@ -22,7 +22,7 @@ from billing.models import (Order, Purchase, StripeCapturePayload,
                             StripeConnectAccount, Transactions)
 from billing.utiils import MakeTransactions
 from billing.utilities.order_rewards import OrderRewards
-from chatchef.settings import env
+from hungrytiger.settings import env
 from communication.api.base.views import BaseTwiloSendMsgView
 from communication.models import CustomerInfo
 from core.utils import get_logger

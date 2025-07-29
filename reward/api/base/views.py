@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from food.models import Restaurant
-from chatchef.settings.defaults import mapbox_api_key
+from hungrytiger.settings.defaults import mapbox_api_key
 from django.db.models import Prefetch, Q
 from accounts.api.base.serializers import BaseRestaurantUserSerializer
 from accounts.models import RestaurantUser

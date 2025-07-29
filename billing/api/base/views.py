@@ -71,8 +71,8 @@ from billing.utilities.generate_invoice import (
     generate_invoices)
 from billing.utilities.generate_invoices_for_hungry import generate_invoices_for_hungry
 from billing.utilities.order_rewards import OrderRewards
-from chatchef.settings import ENV_TYPE, env
-from chatchef.settings.defaults import LOGO_PATH
+from hungrytiger.settings import ENV_TYPE, env
+from hungrytiger.settings.defaults import LOGO_PATH
 from core.api.mixins import GetObjectWithParamMixin, UserCompanyListCreateMixin
 from core.api.paginations import StandardResultsSetPagination
 from core.api.permissions import (HasCompanyAccess, HasRestaurantAccess,

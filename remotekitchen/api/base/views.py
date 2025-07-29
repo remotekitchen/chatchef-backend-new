@@ -23,7 +23,7 @@ from datetime import date
 from django.utils.timezone import now, timedelta
 import time
 import requests
-from chatchef.settings import env 
+from hungrytiger.settings import env 
 from billing.models import Order
 
 GOOGLE_MAPS_API_KEY =env.str("GOOGLE_MAPS_API_KEY")
