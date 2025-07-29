@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from twilio.rest import Client
 
-from chatchef.settings import env
+from hungrytiger.settings import env
 from communication.api.base.serializer import (BaseTwiloSerializer,
                                                BaseWhatsAppOfferSerializer,
                                                GroupInvitationORSerializer)

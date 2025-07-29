@@ -12,8 +12,8 @@ from rest_framework.generics import ListAPIView, get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from chatchef import settings
-from chatchef.settings import OPEN_AI_API_KEY, GOOGLE_SEARCH_API_KEY, GOOGLE_SEARCH_ENGINE_ID, REMOVE_BG_API_KEY
+from hungrytiger import settings
+from hungrytiger.settings import OPEN_AI_API_KEY, GOOGLE_SEARCH_API_KEY, GOOGLE_SEARCH_ENGINE_ID, REMOVE_BG_API_KEY
 from food.models import Menu, Image
 from image_generator.api.base.serializers import BaseImageUrlSerializer, SheetDetailsSerializer, ExcelURLSerializer, \
     CellDataSerializer

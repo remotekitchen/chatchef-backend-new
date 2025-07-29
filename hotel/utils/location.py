@@ -4,7 +4,7 @@ import hashlib
 from django.core.cache import cache
 from datetime import timedelta
 from django.db.models import Prefetch, Subquery, OuterRef, Count, Q, Exists
-from chatchef.settings.defaults import mapbox_api_key
+from hungrytiger.settings.defaults import mapbox_api_key
 from rest_framework.response import Response
 from hotel.utils.helpers import get_date_range, haversine
 import logging

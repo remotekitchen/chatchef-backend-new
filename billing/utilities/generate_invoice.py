@@ -12,7 +12,7 @@ from pytz import timezone as pytz_timezone
 
 from billing.models import Order, PayoutHistory
 from billing.utilities.generate_invoice_pdf import generate_pdf_invoice
-from chatchef.settings.defaults import LOGO_PATH, LOGO_PATH_TECHCHEF
+from hungrytiger.settings.defaults import LOGO_PATH, LOGO_PATH_TECHCHEF
 from food.models import Location
 from openpyxl.utils import get_column_letter
 

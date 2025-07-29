@@ -16,7 +16,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from chatchef.settings import ENV_TYPE
+from hungrytiger.settings import ENV_TYPE
 
 api_url_patterns = (
     [

@@ -21,7 +21,7 @@ from billing.models import (BillingProfile, Order, OrderItem, OrderReminder,
                             Payout)
 from billing.utilities.generate_invoice import generate_invoices
 from billing.utilities.payouts import send_payouts
-from chatchef.celery import app
+from hungrytiger.celery import app
 from communication.utils import Twilo
 from core.utils import get_logger
 from firebase.models import (CompanyPushToken, FirebasePushToken,

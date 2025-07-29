@@ -7,7 +7,7 @@ from rest_framework.exceptions import APIException, ParseError
 
 from billing.models import Order
 from billing.utiils import get_Uber_Credentials, get_uber_header, get_Uber_jwt
-from chatchef.settings import env
+from hungrytiger.settings import env
 from core.utils import get_logger
 from food.models import MenuItem
 from django.utils import timezone

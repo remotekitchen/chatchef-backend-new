@@ -8,7 +8,7 @@ from django.core.files import File
 from django.core.files.temp import NamedTemporaryFile
 import datetime
 
-from chatchef.celery import app
+from hungrytiger.celery import app
 from core.utils import get_logger
 from food.models import Image, Location, MenuItem, ModifierGroup
 import pytz

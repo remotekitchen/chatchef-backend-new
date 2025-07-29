@@ -5,7 +5,7 @@ import stripe
 from billing.clients.doordash_client import DoordashClient
 from billing.models import Order
 from billing.utilities.delivery_manager import DeliveryManager
-from chatchef.settings import env
+from hungrytiger.settings import env
 from core.utils import get_logger
 from Webhook.tasks import order_delivery_scheduler
 

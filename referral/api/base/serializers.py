@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from accounts.api.base.serializers import BaseUserSerializer
-from chatchef.settings.defaults import ENV_TYPE
+from hungrytiger.settings.defaults import ENV_TYPE
 from referral.models import InviteCodes, Referral
 
 

@@ -2,7 +2,7 @@ import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-from chatchef.settings import GOOGLE_CLIENT_SECRET_FILE
+from hungrytiger.settings import GOOGLE_CLIENT_SECRET_FILE
 
 
 class GoogleSheetsService:

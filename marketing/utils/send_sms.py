@@ -1,6 +1,6 @@
 import requests
 from twilio.rest import Client
-from chatchef.settings import env
+from hungrytiger.settings import env
 
 # Twilio credentials
 TWILIO_ACCOUNT_SID = env.str("TWILIO_ACCOUNT_SID")

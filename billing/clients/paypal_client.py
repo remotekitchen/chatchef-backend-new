@@ -3,7 +3,7 @@ import base64
 import requests
 
 from billing.models import PaymentDetails
-from chatchef.settings import env
+from hungrytiger.settings import env
 from core.utils import get_logger
 
 logger = get_logger()

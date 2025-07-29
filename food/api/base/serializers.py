@@ -1,7 +1,7 @@
 from drf_writable_nested import WritableNestedModelSerializer
 from rest_framework import serializers
 from django.utils.timezone import now
-from chatchef.settings.defaults import mapbox_api_key
+from hungrytiger.settings.defaults import mapbox_api_key
 import requests
 from billing.models import RestaurantFee
 

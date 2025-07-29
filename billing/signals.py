@@ -9,7 +9,7 @@ from marketing.utils.send_sms import send_sms_bd
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django_celery_beat.models import ClockedSchedule, PeriodicTask
-from chatchef.settings import ENV_TYPE
+from hungrytiger.settings import ENV_TYPE
 from billing.models import Order
 from billing.utilities.send_order_status_notification import (
     send_new_order_notification_to_restaurant_helper,

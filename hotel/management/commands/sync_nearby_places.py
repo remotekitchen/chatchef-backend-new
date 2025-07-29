@@ -1,7 +1,7 @@
 import requests
 from django.core.management.base import BaseCommand
 from hotel.models import Hotel, NearbyPlace
-from chatchef.settings.defaults import mapbox_api_key
+from hungrytiger.settings.defaults import mapbox_api_key
 from hotel.utils.helpers import haversine
 
 MAPBOX_PLACE_CATEGORIES = [
