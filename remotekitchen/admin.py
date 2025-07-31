@@ -25,6 +25,7 @@ class DeliveryFeeRuleAdmin(admin.ModelAdmin):
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         if db_field.name == "restaurants":
             obj_id = request.resolver_match.kwargs.get('object_id')
+            print("hello")
 
             if obj_id:
                 # Editing an existing rule
