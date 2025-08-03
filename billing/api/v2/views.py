@@ -182,10 +182,25 @@ class CostCalculationAPIView(BaseCostCalculationAPIView):
 
         print("line --> 928 ", data)
 
+        voucher_code = data.get("voucher")
+        user = request.user
+
+        if voucher_code:
+            voucher = Voucher.objects.filter(voucher_code=voucher_code).first()
+            if not voucher:
+                return Response({"error": "Invalid voucher code."}, status=400)
+
+            if not voucher.is_valid_for_user(user):
+                return Response(
+                    {"error": "This voucher can only be used within 30 days of your registration date."},
+                    status=400
+                )
+
+
         calculator = CostCalculation()
         costs = calculator.get_updated_cost(
             order_list=data.get("items"),
-            voucher=data.get("voucher"),
+            voucher=voucher_code,
             location=data.get("location"),
             order_method=data.get("order_method", "delivery"),
             spend_x_save_y=data.get("spend_x_save_y"),
@@ -330,6 +345,12 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
 
             if not voucher:
                 return Response({"error": "Invalid voucher code."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not voucher.is_valid_for_user(user):
+                return Response(
+                    {"error": "This voucher can only be used within 30 days of registration."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             # Check one-time use (for all users)
             if voucher.is_one_time_use:

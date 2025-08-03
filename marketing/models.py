@@ -15,7 +15,8 @@ from reward.models import Reward, RewardGroup
 from reward.utils.reward_calculation import RewardCalculation
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.postgres.fields import ArrayField
-
+from datetime import timedelta
+from django.utils import timezone
 
 # Activation Campaign Models
 class Duration(BaseModel):
@@ -235,6 +236,11 @@ class Voucher(ActivationCampaign):
       restaurant_share = (self.ht_voucher_percentage_borne_by_restaurant / 100) * discount
       ht_share = discount - restaurant_share
       return restaurant_share, ht_share
+    
+    def is_valid_for_user(self, user):
+        if not user or not user.date_joined:
+            return False
+        return timezone.now() <= user.date_joined + timedelta(days=30)
     
 
 class PlatformCouponExpiryLog(models.Model):
