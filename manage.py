@@ -4,6 +4,14 @@ import os
 import sys
 
 
+# Optional Windows-only patch for dev — safe to add
+import platform
+if platform.system() == "Windows":
+    try:
+        import tempfile_patch_windows  # you'll create this file
+    except ImportError:
+        pass  # silently skip if not present
+
 def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'hungrytiger.settings')
