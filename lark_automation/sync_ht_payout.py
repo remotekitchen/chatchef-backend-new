@@ -7,7 +7,7 @@ from dateutil import parser
 LARK_APP_ID = "cli_a8030393dd799010"
 LARK_APP_SECRET = "8ZuSlhJWZrXCcyHHOkU3kfHF2BlPGKrY"
 LARK_BASE_ID = "OGP4b0T04a2QmesErNsuSkRTs4P"
-LARK_TABLE_ID = "tblmm5GcSsbPyI5i"
+LARK_TABLE_ID = "tblYufKw5Srkz5bA"
 LARK_API_URL = f"https://open.larksuite.com/open-apis/bitable/v1/apps/{LARK_BASE_ID}/tables/{LARK_TABLE_ID}/records"
 
 # === AUTH ===

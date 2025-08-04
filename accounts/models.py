@@ -48,6 +48,8 @@ class User(AbstractUser):
         verbose_name=_('is email verified'), default=False)
     is_phone_verified = models.BooleanField(
         verbose_name=_('is phone verified'), default=False)
+    is_blocked = models.BooleanField(default=False, verbose_name=_("Blocked"))
+
     agree = models.BooleanField(verbose_name=_('Agree'), default=False)
     uid = models.UUIDField(verbose_name=_(
         'verify id'), unique=True, blank=True, null=True)
