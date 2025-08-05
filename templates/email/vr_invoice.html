@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Invoice for {{ vr_name }}</title>
+    <title>Invoice for {{ platform }}</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -47,7 +47,7 @@
       <p>Dear Team,</p>
       <p>Please find attached the VR invoice Excel file for your records.</p>
       <ul>
-        <li><strong>VR Name:</strong> {{ vr_name }}</li>
+        <li><strong>Platform:</strong> {{ platform }}</li>
         <li><strong>Date Range:</strong> {{ start_date }} to {{ end_date }}</li>
       </ul>
       <p>
@@ -56,7 +56,7 @@
       </p>
       <p>
         Regards,<br />
-        Your Company
+        Hungry Tiger
       </p>
       <div class="footer">This is an automated email—please do not reply.</div>
     </div>

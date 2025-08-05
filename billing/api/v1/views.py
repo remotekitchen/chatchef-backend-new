@@ -30,7 +30,7 @@ from billing.api.base.views import (
     BaseSendOrderReceiptAPIView, BaseRefundViewSet, BaseRemotekitchenOrderAPIView,
     BaseRestaurantFeeApiView, BaseOrderUserCancelAPIView, BaseExportUserOrderExcelAPIView,
     # BaseLarkWebhookAPIView
-    BaseGenerateVRInvoiceAPIView,BaseSendVRInvoiceAPIView,BaseExportCustomerOrders,BaseCartValidationAPIView,BaseUberStuckOrdersAPIView
+    BaseExportCustomerOrders,BaseCartValidationAPIView,BaseUberStuckOrdersAPIView,BaseVRInvoiceWebhookView
     )
 
 from billing.api.v1.serializers import (BillingProfileSerializer,
@@ -276,11 +276,11 @@ class ExportUserOrderExcelAPIView(BaseExportUserOrderExcelAPIView):
     pass
 
 
-class GenerateVRInvoiceAPIView(BaseGenerateVRInvoiceAPIView):
-    pass
+# class GenerateVRInvoiceAPIView(BaseGenerateVRInvoiceAPIView):
+#     pass
 
-class SendVRInvoiceAPIView(BaseSendVRInvoiceAPIView):
-    pass
+# class SendVRInvoiceAPIView(BaseSendVRInvoiceAPIView):
+#     pass
 
 
 class ExportCustomerOrders(BaseExportCustomerOrders):
@@ -292,4 +292,9 @@ class CartValidationAPIView(BaseCartValidationAPIView):
 
 
 class UberStuckOrdersAPIView(BaseUberStuckOrdersAPIView):
+    pass
+
+
+
+class VRInvoiceWebhookView(BaseVRInvoiceWebhookView):
     pass
