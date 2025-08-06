@@ -26,6 +26,9 @@ from rest_framework.generics import (GenericAPIView, ListAPIView,
                                      ListCreateAPIView, RetrieveAPIView,
                                      RetrieveUpdateDestroyAPIView,
                                      get_object_or_404)
+
+from lark_automation.sync_ht_payout import push_hungry_invoices_to_lark_from_history
+from lark_automation.sync_DO_calculation import push_DO_invoices_to_lark_from_history
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -838,7 +841,7 @@ class BaseCreateOrderAPIView(GenericAPIView):
             text = (
                 f"Dear Amena, you have a new {order.order_method} order in {restaurant.name}. "
                 f"Birokto na hoye order delivery koren. Name: {customer_name}, "
-                f"Phone: {order.dropoff_phone_number}, Address: {order.dropoff_address}, "
+                f"Phone: {order.dropoff_phone_number}, Address: {order.dropoff_address},Email: {order.user.email}, "
                 f"Amount: {order.total}৳. Item: {order_items_info}"
             )
             sms_response = "SMS not sent (non-production)"
@@ -2400,6 +2403,8 @@ class BaseGenerateInvoiceAPIView(APIView):
 
         if generate:
             generate_invoices(start_date, end_date, location)
+            push_DO_invoices_to_lark_from_history(start_date, end_date)
+
             return Response("Invoice Generated")
         else:
             # Filter by date range if start_date and end_date are provided
@@ -3174,6 +3179,7 @@ class BaseGenerateInvoiceForHungry(APIView):
 
         if generate:
             generate_invoices_for_hungry(start_date, end_date, location)
+            push_hungry_invoices_to_lark_from_history(start_date, end_date)
             return Response("Invoice Generated")
         else:
             # Filter by date range if start_date and end_date are provided
@@ -4235,27 +4241,39 @@ class BaseSendVRInvoiceAPIView(APIView):
 
 
 
-
 class BaseExportCustomerOrders(APIView):
     """
     API that returns customer order data for syncing to Lark Base.
-    Optimized with annotations to avoid N+1 queries.
+    Optimized with annotations and deduplicated by phone number.
     """
 
     def get(self, request):
-        # Build the filter for "paid or cash" orders
-        paid_or_cash_filter = Q(order__payment_method=Order.PaymentMethod.CASH) | Q(order__is_paid=True)
+        completed_order_filter = Q(order__status=Order.StatusChoices.COMPLETED)
 
-        # Annotate users with aggregate order data
-        users = User.objects.filter(phone__isnull=False).exclude(phone="").annotate(
-            first_order=Min('order__receive_date', filter=paid_or_cash_filter),
-            last_order=Max('order__receive_date', filter=paid_or_cash_filter),
-            total_orders=Count('order', filter=paid_or_cash_filter)
+        # Filter and deduplicate users by phone number
+        users = User.objects.filter(
+            phone__isnull=False,
+            phone__startswith="+880"
+        ).order_by('phone', 'id')  # Ensure deterministic selection
+
+        # Deduplicate by phone
+        seen_phones = set()
+        unique_users = []
+
+        for user in users:
+            if user.phone not in seen_phones:
+                seen_phones.add(user.phone)
+                unique_users.append(user)
+
+        # Annotate after filtering
+        annotated_users = User.objects.filter(id__in=[u.id for u in unique_users]).annotate(
+            first_order=Min('order__receive_date', filter=completed_order_filter),
+            last_order=Max('order__receive_date', filter=completed_order_filter),
+            total_orders=Count('order', filter=completed_order_filter)
         )
 
         data = []
-
-        for user in users:
+        for user in annotated_users:
             data.append({
                 "phone": user.phone or "",
                 "email": user.email,
@@ -4265,7 +4283,6 @@ class BaseExportCustomerOrders(APIView):
                 "last_order_date": user.last_order.strftime("%Y-%m-%d") if user.last_order else "",
                 "total_orders": user.total_orders
             })
-
 
         return Response(data)
 

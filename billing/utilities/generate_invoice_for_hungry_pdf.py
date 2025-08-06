@@ -64,7 +64,13 @@ def generate_pdf_for_hungry_invoice(order_list,
     html_content = template.render(data).encode('utf-8')
     # Replace with the actual path if different
     # path_to_wkhtmltopdf = '/usr/local/bin/wkhtmltopdf'
-    path_to_wkhtmltopdf = '/usr/bin/wkhtmltopdf'
+    # path_to_wkhtmltopdf = '/usr/bin/wkhtmltopdf'
+    import platform
+    if platform.system() == "Windows":
+        path_to_wkhtmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
+    else:
+        path_to_wkhtmltopdf = '/usr/bin/wkhtmltopdf'
+
     # test comment
     config = pdfkit.configuration(wkhtmltopdf=path_to_wkhtmltopdf)
     options = {

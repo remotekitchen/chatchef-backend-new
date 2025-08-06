@@ -12,6 +12,7 @@ import pandas as pd
 import pytz
 from django.core.files.uploadedfile import (InMemoryUploadedFile,
                                             TemporaryUploadedFile)
+from rest_framework.filters import SearchFilter
 from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -72,6 +73,9 @@ class BaseRestaurantListCreateAPIView(UserCompanyListCreateMixin, ListCreateAPIV
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsAuthenticated]
     user_field_name = "owner"
+
+    filter_backends = [SearchFilter]
+    search_fields = ['name']
 
 
 class BaseRestaurantListAPIView(ListCreateAPIView):
@@ -312,7 +316,7 @@ class BaseMenuListCreateAPIView(UserCompanyListCreateMixin, ListCreateAPIView):
         if restaurant is not None and location is not None:
             query_set = query_set.filter(
                 restaurant=restaurant, locations=location)
-        if restaurant is not None and da is not None:
+        if restaurant is not None:
             query_set = query_set.filter(
                 restaurant=restaurant)
         return query_set

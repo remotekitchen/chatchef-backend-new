@@ -9,7 +9,7 @@ from marketing.models import Rating
 from remotekitchen.api.base.serializers import (
     BaseRemoteKitchenCuisineSerializer, RemoteKitchenRestaurantSerializer)
 from remotekitchen.models import Cuisine, SearchKeyword, Favorite, FavoriteRestaurant, DeliveryFeeRule
-from accounts.models import UserAddress
+from accounts.models import UserAddress,RedZone
 from remotekitchen.utils import StandardRemoteKitchenResultsSetPagination
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
@@ -25,7 +25,7 @@ import time
 import requests
 from hungrytiger.settings import env 
 from billing.models import Order
-
+from remotekitchen.utils import haversine_distance
 GOOGLE_MAPS_API_KEY =env.str("GOOGLE_MAPS_API_KEY")
 
 class BaseRemoteKitchenCuisineModelView(viewsets.ModelViewSet):
@@ -88,6 +88,28 @@ class BaseRemoteKitchenRestaurantList(BaseRestaurantListAPIView):
 
     def get_queryset(self):
         query_set = super().get_queryset().filter(is_remote_Kitchen=True)
+        lat = self.request.query_params.get("lat")
+        lon = self.request.query_params.get("lng") 
+        self.user_in_red_zone = False
+        if lat and lon:
+            try:
+                lat = float(lat)
+                lon = float(lon)
+
+                for zone in RedZone.objects.filter(active=True):
+                    distance_to_zone = haversine_distance(lat, lon, zone.center_lat, zone.center_lon)
+                    print(f"Distance to {zone.name}: {distance_to_zone:.3f} km (Radius: {zone.radius_km})")
+                    if distance_to_zone <= zone.radius_km:
+                        # User is in a red zone — show only allowed restaurants
+                        print(f"User is inside red zone: {zone.name}")
+                        self.user_in_red_zone = True  
+                        return zone.allowed_restaurants.filter(is_remote_Kitchen=True, is_store_close=False)
+
+
+            except Exception as e:
+                print(f"Error in red zone distance check: {e}")
+                pass  # Fail gracefully if bad input
+
         cuisines = self.request.query_params.get("cuisine")  
         price_lte = self.request.query_params.get("price_lte")
         price_gte = self.request.query_params.get("price_gte")
@@ -221,7 +243,15 @@ class BaseRemoteKitchenRestaurantList(BaseRestaurantListAPIView):
         #  Paginate
         page = self.paginate_queryset(data)
         if page is not None:
-            return self.get_paginated_response(page)
+                if not page:
+                    # Paginated but empty result
+                    message = "We’re sorry! No restaurants are available for delivery in your area right now."
+                    return Response({
+                        "restaurants": [],
+                        "message": message,
+                        "red_zone": getattr(self, "user_in_red_zone", False)
+                    }, status=status.HTTP_200_OK)
+                return self.get_paginated_response(page)
 
         return Response(data)
 

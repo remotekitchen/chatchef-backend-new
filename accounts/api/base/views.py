@@ -106,6 +106,9 @@ class AbstractBaseLoginView(GenericAPIView):
             raise ValidationError(serializer.errors)
 
         user = serializer.validated_data.get("user")
+        if user.is_blocked:
+            raise PermissionDenied("Your account has been blocked. Please contact support.")
+
         created = user.date_joined >= current_dt
         direct_order = request.query_params.get('direct_order', False)
         if not direct_order and user.role == User.RoleType.NA:
