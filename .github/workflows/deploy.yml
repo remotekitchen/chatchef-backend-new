@@ -19,7 +19,7 @@ jobs:
           port: ${{ secrets.DIGITALOCEAN_PORT }}
           script: |
             echo "🔁 Switching to app directory..."
-            cd /home/remotekitchen/chatchef_dir/chatchef-backend || { echo "❌ Directory not found"; exit 1; }
+            cd /home/remotekitchen/chatchef_dir/chatchef-backend || { echo "Directory not found"; exit 1; }
 
             echo "📥 Pulling latest changes from main..."
             git stash
