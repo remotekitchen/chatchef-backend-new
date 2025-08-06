@@ -179,7 +179,7 @@ LOGGING = {
         "file": {
             "level": "INFO",
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": LOGS_DIR / "debug.log",
+            "filename": str(LOGS_DIR / "debug.log"),
             "maxBytes": 1024 * 1024 * 100,  # 100 MB
             "backupCount": 5,
             "formatter": "verbose",
