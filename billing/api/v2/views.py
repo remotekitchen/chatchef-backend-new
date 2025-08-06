@@ -583,8 +583,7 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
             # Remove the trailing comma and space
             order_items_info = order_items_info.rstrip(", ")
             # phone = '01711690821'
-            # phone_numbers =["01334923595","01711690821","01980796731"]
-            phone_numbers =["01609620222"]
+            phone_numbers =["01334923595","01711690821","01980796731"]
             text = (
                 f"Dear Amena you have a new order in {restaurant}. "
                 f"Birokto na hoye order delivery koren. "
