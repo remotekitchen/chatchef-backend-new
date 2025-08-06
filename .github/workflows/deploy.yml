@@ -19,26 +19,31 @@ jobs:
           port: ${{ secrets.DIGITALOCEAN_PORT }}
           script: |
             echo "🔁 Switching to app directory..."
-            cd ~/chatchef_dir/chatchef-backend
+            cd /home/remotekitchen/chatchef_dir/chatchef-backend || { echo ".Directory not found"; exit 1; }
 
             echo "📥 Pulling latest changes from main..."
             git stash
-            git pull origin main
+            git pull origin main || { echo "❌ Git pull failed"; exit 1; }
 
             echo "🐍 Activating virtual environment..."
+            if [ ! -d "venv" ]; then
+              echo "🔧 Creating virtual environment..."
+              python3 -m venv venv
+            fi
             source venv/bin/activate
 
             echo "📦 Installing dependencies..."
-            pip install -r requirements.txt
+            pip3 install -r requirements.txt || { echo "❌ Pip install failed"; exit 1; }
 
             echo "🛠 Running database migrations..."
-            python manage.py migrate --no-input
+            python3 manage.py migrate --no-input || { echo "❌ Migrations failed"; exit 1; }
 
             # Optional: Uncomment if you're using Django static files
             # echo "📁 Collecting static files..."
-            # python manage.py collectstatic --no-input
+            # python3 manage.py collectstatic --no-input
 
             echo "🚀 Restarting Gunicorn service..."
-            sudo systemctl restart gunicorn_chatchef
+            sudo -S systemctl restart gunicorn_chatchef <<< "${{ secrets.SUDO_PASSWORD }}" || { echo "❌ Gunicorn restart failed"; exit 1; }
 
             echo "✅ Deployment to server completed."
+
