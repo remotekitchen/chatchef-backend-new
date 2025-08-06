@@ -960,3 +960,49 @@ def setup_ubereats_stuck_order_check(sender, **kwargs):
         print(f"✅ Created periodic task '{task_name}'.")
     else:
         print(f"⚠️ Periodic task '{task_name}' already exists.")
+
+
+
+
+
+from lark_automation.sync_consumer import sync_customers
+@shared_task
+def sync_customers_to_lark():
+    sync_customers()  # ✅ Fix: must call the function
+
+
+@receiver(post_migrate)
+def create_sync_task_after_migrate(sender, **kwargs):
+    if sender.name != "billing":
+        return
+    setup_periodic_task()
+
+
+def setup_periodic_task():
+    task_name = 'Sync Customers to Lark'
+
+    # Crontab: run every day at 12 AM Bangladesh time (18:00 UTC)
+    schedule, _ = CrontabSchedule.objects.get_or_create(
+        minute='0',
+        hour='18',
+        day_of_week='*',
+        day_of_month='*',
+        month_of_year='*',
+    )
+
+    task, created = PeriodicTask.objects.update_or_create(
+        name=task_name,
+        defaults={
+            'task': 'billing.tasks.sync_customers_to_lark',  # must match full dotted path
+            'crontab': schedule,
+            'args': json.dumps([]),
+            'kwargs': json.dumps({}),
+            'enabled': True,
+            'description': 'Automatically syncs Django users to Lark Base every night',
+        }
+    )
+
+    if created:
+        print(f"✅ Created periodic task: {task_name}")
+    else:
+        print(f"🔁 Periodic task '{task_name}' already exists and was updated.")
