@@ -3,10 +3,7 @@ from django.contrib.admin import display
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from accounts.models import Company, Otp, RestaurantUser, User, UserAddress,BlockedPhoneNumber
-from accounts.models import  QRScan
-from accounts.models import Customer, Subscription, CancellationRequest
-
+from accounts.models import Company, Otp, RestaurantUser, User, UserAddress,BlockedPhoneNumber,QRScan,Customer, Subscription, CancellationRequest,RedZone
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -112,3 +109,11 @@ class CancellationRequestAdmin(admin.ModelAdmin):
     list_display = ("subscription", "status", "created")
     search_fields = ("subscription__customer__email", "reason", "details")
     list_filter = ("status", "created")
+
+
+
+
+@admin.register(RedZone)
+class RedZoneAdmin(admin.ModelAdmin):
+    list_display = ("name", "center_lat", "center_lon", "radius_km", "active")
+    filter_horizontal = ("allowed_restaurants",)
