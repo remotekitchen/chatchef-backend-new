@@ -37,6 +37,8 @@ from billing.models import RestaurantContract
 from core.utils import get_logger
 import pytz
 from django.utils import timezone
+from rest_framework.permissions import  IsAuthenticated
+from accounts.permissions import IsNotBlocked
 
 logger = get_logger()
 
@@ -268,7 +270,7 @@ class CostCalculationAPIView(BaseCostCalculationAPIView):
 
 
 class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
-
+    permission_classes = [IsAuthenticated,IsNotBlocked]
     def post(self, request, *args, **kwargs):
         logger.info("Child view POST called")
 
@@ -582,7 +584,14 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
             order_items_info = order_items_info.rstrip(", ")
             # phone = '01711690821'
             phone_numbers =["01334923595","01711690821","01980796731"]
-            text = f"Dear Amena you have a new order in {restaurant}. Birokto na hoye order delivery koren.Name: {order.customer}, Phone: {order.dropoff_phone_number}, Address: {order.dropoff_address}, Amount:{order.total}. Item: {order_items_info}"
+            text = (
+                f"Dear Amena you have a new order in {restaurant}. "
+                f"Birokto na hoye order delivery koren. "
+                f"Name: {order.customer}, Phone: {order.dropoff_phone_number}, "
+                f"Address: {order.dropoff_address}, Email: {order.user.email}, "
+                f"Amount: {order.total}. Item: {order_items_info}"
+            )
+
             sms_response = "SMS not sent (non-production)"
 
             if ENV_TYPE == "PRODUCTION":

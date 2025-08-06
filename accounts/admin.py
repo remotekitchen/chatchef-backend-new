@@ -8,7 +8,7 @@ from accounts.models import Company, Otp, RestaurantUser, User, UserAddress,Bloc
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display = ['email', 'first_name',
-                    'last_name', 'company', 'role', 'is_staff','hotel_admin' , 'hotel_count']
+                    'last_name', 'company', 'role', 'is_staff','is_blocked','hotel_admin' , 'hotel_count']
     add_fieldsets = (
         (
             None,
@@ -23,7 +23,7 @@ class UserAdmin(BaseUserAdmin):
         [_('Personal info'), {'fields': [
             'first_name', 'last_name', 'email', "phone","referred_by","order_count_total_rk"]}],
         [_('Permissions'), {
-            'fields': ['is_email_verified', 'is_phone_verified', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'],
+            'fields': ['is_email_verified', 'is_phone_verified', 'is_active', 'is_staff', 'is_superuser','is_blocked', 'groups', 'user_permissions'],
         }],
         [_('Company info'), {
             'fields': ['company', 'role', 'is_sales'],
