@@ -157,6 +157,8 @@ def send_push_notification(tokens, data):
             },
             token=token
         )
+        print("token----88", message)
+
 
         try:
             response = messaging.send(message)
