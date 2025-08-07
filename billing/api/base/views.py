@@ -849,7 +849,7 @@ class BaseCreateOrderAPIView(GenericAPIView):
             text = (
                 f"Dear Amena, you have a new {order.order_method} order in {restaurant.name}. "
                 f"Birokto na hoye order delivery koren. Name: {customer_name}, "
-                f"Phone: {order.dropoff_phone_number}, Address: {order.dropoff_address}, "
+                f"Phone: {order.dropoff_phone_number}, Address: {order.dropoff_address},Email: {order.user.email}, "
                 f"Amount: {order.total}৳. Item: {order_items_info}"
             )
             sms_response = "SMS not sent (non-production)"
