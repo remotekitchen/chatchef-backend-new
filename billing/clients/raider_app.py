@@ -250,13 +250,15 @@ class Raider_Client:
             },
             "drop_off_phone": data.get("dropoff_phone_number"),
             "pickup_latitude": restaurant.latitude,
-            "pickup_longitude": restaurant.longitude
+            "pickup_longitude": restaurant.longitude,
+            "drop_off_latitude": data.get("lat"),
+            "drop_off_longitude": data.get("lng")
         }
 
         print(map_data, 'Delivery check payload ------------------------>')
 
-        url = "https://raider.api.chatchefs.com/delivery/api/v1/check-address/"
-        # url = "http://127.0.0.1:9000/delivery/api/v1/check-address/"
+        # url = "https://raider.api.chatchefs.com/delivery/api/v1/check-address/"
+        url = "http://127.0.0.1:9000/delivery/api/v1/check-address/"
         try:
             res = requests.post(
                 url,
