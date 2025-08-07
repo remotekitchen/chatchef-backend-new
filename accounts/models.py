@@ -48,6 +48,8 @@ class User(AbstractUser):
         verbose_name=_('is email verified'), default=False)
     is_phone_verified = models.BooleanField(
         verbose_name=_('is phone verified'), default=False)
+    is_blocked = models.BooleanField(default=False, verbose_name=_("Blocked"))
+
     agree = models.BooleanField(verbose_name=_('Agree'), default=False)
     uid = models.UUIDField(verbose_name=_(
         'verify id'), unique=True, blank=True, null=True)
@@ -514,3 +516,21 @@ class FeedbackPrompt(models.Model):
 
     def __str__(self):
         return f"{self.user or 'Guest'}: {'⭐'+str(self.rating) if self.rating else ' Skipped'}"
+
+
+
+
+
+
+class RedZone(models.Model):
+    name = models.CharField(max_length=100)
+    center_lat = models.FloatField(verbose_name=_('Latitude'))
+    center_lon = models.FloatField(verbose_name=_('Longitude'))
+    radius_km = models.FloatField(default=1.0)
+    allowed_restaurants = models.ManyToManyField("food.Restaurant", blank=True)  
+    coverage_area = models.CharField(max_length=200, blank=True, null=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
