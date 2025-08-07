@@ -21,7 +21,9 @@ from rest_framework.views import APIView
 from datetime import timedelta
 from django.db.models import Sum
 from collections import defaultdict
-from accounts.models import Customer, Subscription, CancellationRequest
+from accounts.models import Customer, Subscription, CancellationRequest,QuickLoginUser
+from django.contrib.auth.hashers import make_password
+import secrets
 
 from accounts.api.base.serializers import (
     BaseSubscriptionCreateSerializer,
@@ -67,7 +69,7 @@ from django.utils.crypto import get_random_string
 from marketing.email_sender import send_email # Your existing utility
 from accounts.utils import  send_email_verification_otp ,send_password_reset_otp_email # UUID logic
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model,authenticate
 from django.utils.dateparse import parse_date
 from accounts.models import DAURecord, UserEvent, UserEngagementSegment, UserEngagementSegment,UserChurnStatus, CohortRetentionRecord, UserCohort, ConversionFunnelRecord
 from accounts.utils import get_bdt_time, get_client_ip
@@ -1474,3 +1476,41 @@ class BaseConversionRateAPIView(APIView):
             "unique_deal_clicked_users": unique_deal_clicked_users,
             "unique_deal_ordered_users": unique_deal_ordered_users,
         })
+
+
+class BaseQuickLoginAPIView(APIView):
+    def post(self, request):
+        email = request.data.get("email")
+        password = request.data.get("password")
+        fcm_token = request.data.get("fcm_token")
+
+        if not email or not password:
+            return Response({"detail": "Email and password required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = QuickLoginUser.objects.get(email=email, password=password)
+        except QuickLoginUser.DoesNotExist:
+            return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not user.is_active:
+            return Response({"detail": "User is deactivated."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Optional: Update FCM token only if changed
+        if fcm_token and user.fcm_token != fcm_token:
+            user.fcm_token = fcm_token
+
+        # Generate token if not present
+        if not user.token:
+            user.token = secrets.token_hex(32)
+
+        user.save()
+
+        return Response({
+            "token": user.token,
+            "user_id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "label": user.label,
+            "fcm_token": user.fcm_token,
+            "created_at": user.created_at.strftime("%Y-%m-%d %H:%M:%S") if user.created_at else None
+        }, status=status.HTTP_200_OK)
