@@ -17,7 +17,7 @@ from food.models import Location
 from openpyxl.utils import get_column_letter
 
 
-def generate_excel_invoice(orders, restaurant, location, adjustments=0, adjustments_note=None):
+def generate_excel_invoice(orders, restaurant, location, adjustments=0, adjustments_note=None, only_data=False):
     light_gray_fill = PatternFill(
         start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
     bold_font = Font(bold=True)
@@ -243,11 +243,27 @@ def generate_excel_invoice(orders, restaurant, location, adjustments=0, adjustme
     img.width, img.height = 100, 100
     sheet.add_image(img, 'A3')
 
-    with NamedTemporaryFile() as tmp:
-        workbook.save(tmp.name)
-        tmp.seek(0)
-        stream = tmp.read()
-        # stream, order_list, amount, cash_total, total
+    if only_data:
+        stream = None
+    else:
+        from tempfile import NamedTemporaryFile
+        import os
+
+        with NamedTemporaryFile(delete=False) as tmp:
+            temp_path = tmp.name
+
+        try:
+            workbook.save(temp_path)
+            with open(temp_path, "rb") as f:
+                stream = f.read()
+        finally:
+            os.remove(temp_path)
+
+    # with NamedTemporaryFile() as tmp:
+    #     workbook.save(tmp.name)
+    #     tmp.seek(0)
+    #     stream = tmp.read()
+    #     # stream, order_list, amount, cash_total, total
 
     obj = [
         order_data,
@@ -258,6 +274,9 @@ def generate_excel_invoice(orders, restaurant, location, adjustments=0, adjustme
         f"{float('{0: .2f}'.format(service_fee_paid_to_restaurant))}",
         f"{float('{0: .2f}'.format(total_stripe_fees))}",
     ]
+
+    if only_data:
+        return None, obj
     return stream, obj
 
 

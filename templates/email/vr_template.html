@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ reference_no }}</title>
+    <style>
+      /* Page */
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+      }
+      .page {
+        padding: 14px;
+        font-size: 12px;
+      }
+
+      /* Title + date */
+      .title {
+        background: #d9d9d9;
+        font-weight: 800;
+        text-align: center;
+        padding: 10px 8px;
+        font-size: 24px; /* ⬅ bigger INVOICE */
+        letter-spacing: 0.5px;
+      }
+      .date {
+        text-align: right;
+        font-weight: 700;
+        margin: 6px 0 10px 0;
+        font-size: 13px;
+      }
+
+      /* Section bars and blocks */
+      .bar {
+        background: #e9e9e9;
+        padding: 8px 10px;
+        font-weight: 800;
+        font-size: 14px; /* ⬅ bigger “Pay to / From / Charges” */
+      }
+      .block {
+        padding: 8px 10px 10px 10px;
+        font-size: 12.5px;
+      }
+      .muted {
+        color: #333;
+      }
+
+      /* Charges table */
+      table.sheet {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+      table.sheet th,
+      table.sheet td {
+        border: 1px solid #bdbdbd;
+        padding: 10px 8px;
+      } /* ⬅ taller header/rows */
+      table.sheet th {
+        background: #dcdcdc;
+        text-align: center;
+        font-weight: 800;
+        font-size: 12.5px; /* ⬅ header font bigger */
+      }
+      .left {
+        text-align: left;
+      }
+      .num {
+        text-align: right;
+      }
+
+      /* Footer row inside grid */
+      tfoot td.bar {
+        background: #efefef;
+        border-top: 2px solid #bdbdbd;
+        font-weight: 900;
+        font-size: 16px; /* ⬅ bigger “Amount to be Paid” */
+        padding: 12px 10px; /* ⬅ taller footer row */
+      }
+      tfoot td.bar.num {
+        font-size: 18px; /* ⬅ bigger amount figure */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <!-- INVOICE headline + date -->
+      <div class="title">INVOICE</div>
+      <div class="date">Date: {{ date }}</div>
+
+      <!-- Pay to -->
+      <div class="bar">Pay to</div>
+      <div class="block">
+        <div class="muted">Nice Meeting You</div>
+        <div class="muted">535 Clarke Rd, Coquitlam, BC V3J 3X4</div>
+      </div>
+
+      <!-- From -->
+      <div class="bar">From</div>
+      <div class="block">
+        <div class="muted">Thunder Digital Kitchen</div>
+        <div class="muted">
+          200 - 13571 COMMERCE PKY, RICHMOND BC V6V 2R2, CANADA
+        </div>
+      </div>
+
+      <!-- Charges -->
+      <div class="bar" style="margin-top: 10px">Charges</div>
+
+      {% if orders_list and columns %}
+      <table class="sheet">
+        <thead>
+          <tr>
+            {% for c in columns %}
+            <th>{{ c }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in orders_list %}
+          <tr>
+            {% for c in columns %} {% if c in ["Total","Sales Tax","Unit
+            Price","Selling price", "Payout from platforms","Markup
+            (10%)","Discount", "Revenue GST","Revenue PST", "Platform fees
+            (Commission + Tax)"] %}
+            <td class="num">{{ row[c] }}</td>
+            {% else %}
+            <td class="left">{{ row[c] }}</td>
+            {% endif %} {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+
+        <!-- Footer row INSIDE the grid, aligned under Total -->
+        <tfoot>
+          <tr>
+            <td
+              class="bar"
+              colspan="{{ label_colspan }}"
+              style="text-align: right"
+            >
+              Amount to be Paid
+            </td>
+            <td class="bar num">{{ grand_total }}</td>
+            {% for _ in range(trailing_cells) %}
+            <td></td>
+            {% endfor %}
+          </tr>
+        </tfoot>
+      </table>
+      {% else %}
+      <div class="block">No rows.</div>
+      {% endif %}
+    </div>
+  </body>
+</html>

@@ -24,7 +24,7 @@ for bogo in Bogo.objects.filter(is_disabled=False).prefetch_related('items'):
     for item in bogo.items.all():
         bogo_item_map[item.id] = bogo.inflate_percent
 
-def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=0, adjustments_note=None):
+def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=0, adjustments_note=None, only_data=False):
     light_gray_fill = PatternFill(
         start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
     bold_font = Font(bold=True)
@@ -300,13 +300,22 @@ def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=
         ])
             # 🌿 19) Append Order Data JSON
         order_data.append({
-            'order_date': str(order.receive_date_ht),
+            'order_date': str(getattr(order, "receive_date_ht", None) or order.receive_date.date()),
+
             'order_id': str(order.order_id),
             'actual_item_price': str(total_actual_price),
             'item_price': str(total_item_price),
             'discount': str(main_discount),
             'special_discount(HT)': str(order.special_discount),
-            'BOGO_item_inflation_percentage': "40",
+            'BOGO_item_inflation_percentage':  str(
+                    max(
+                        [
+                            item.get("bogo_details", {}).get("inflate_percent", 0)
+                            for item in order.order_item_meta_data
+                            if item.get("is_bogo")
+                        ] or [0]
+                    )
+                ),
             'BOGO_discount': str(order.bogo_discount),
             'BOGO_discount_bear_by_restaurant': str(restaurant_bogo_bear),
             'restaurant_discount': str(restaurant_discount_total),
@@ -432,10 +441,22 @@ def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=
     # sheet.add_image(img, 'E3')
 
 
-    with NamedTemporaryFile() as tmp:
-        workbook.save(tmp.name)
-        tmp.seek(0)
-        stream = tmp.read()
+    if only_data:
+        stream = None
+    else:
+        from tempfile import NamedTemporaryFile
+        import os
+
+        with NamedTemporaryFile(delete=False) as tmp:
+            temp_path = tmp.name
+
+        try:
+            workbook.save(temp_path)
+            with open(temp_path, "rb") as f:
+                stream = f.read()
+        finally:
+            os.remove(temp_path)
+
 
     obj = [
         order_data,
@@ -447,6 +468,10 @@ def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=
         f"{float('{0: .2f}'.format(sales_bkash))}",
         f"{float('{0: .2f}'.format(total_amount_to_restaurant))}"
         ]
+    
+    if only_data:
+        return None, obj
+
     return stream, obj
 
 

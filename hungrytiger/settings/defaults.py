@@ -419,16 +419,10 @@ FRONTEND_URL = "https://www.hungry-tiger.com/"
 
 
 # Lark App credentials
-LARK_APP_ID = "cli_a8d53aeb9038d010"
-LARK_APP_SECRET = "9b0pQoLYJbnNJOdrHSJNAfD6iBeOUYSs"
+LARK_APP_ID = "cli_a8030393dd799010"
+LARK_APP_SECRET = "8ZuSlhJWZrXCcyHHOkU3kfHF2BlPGKrY"
 
-# Base ID (original one you had)
+# Your base and tables
 LARK_BITABLE_BASE_ID = "OGP4b0T04a2QmesErNsuSkRTs4P"
-
-# Table IDs inside that base
-LARK_TABLE_ID_VR_DATA = "tblgkJObnv96uaYr"
-LARK_TABLE_ID_INVOICE = "tbl1Tlb5xxlrlV4h"
-
-# NEW: for hungrytiger sales
-LARK_BASE_ID = "Ms7dbtQTfaew87s3OHfuRGRZsze"
-LARK_TABLE_ID = "tblrssqND91wnmdC"
+LARK_TABLE_ID_VR_DATA = "tblgkJObnv96uaYr"       # VR data table (source rows)
+LARK_TABLE_ID_VR_CONTROL = "tbl1Tlb5xxlrlV4h" 
