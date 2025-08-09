@@ -27,8 +27,8 @@ from rest_framework.generics import (GenericAPIView, ListAPIView,
                                      RetrieveUpdateDestroyAPIView,
                                      get_object_or_404)
 
-from lark_automation.sync_ht_payout import push_hungry_invoices_to_lark_from_history
-from lark_automation.sync_DO_calculation import push_DO_invoices_to_lark_from_history
+# from lark_automation.sync_ht_payout import push_hungry_invoices_to_lark_from_history
+# from lark_automation.sync_DO_calculation import push_DO_invoices_to_lark_from_history
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -2411,7 +2411,7 @@ class BaseGenerateInvoiceAPIView(APIView):
 
         if generate:
             generate_invoices(start_date, end_date, location)
-            push_DO_invoices_to_lark_from_history(start_date, end_date)
+            # push_DO_invoices_to_lark_from_history(start_date, end_date)
 
             return Response("Invoice Generated")
         else:
@@ -3187,7 +3187,7 @@ class BaseGenerateInvoiceForHungry(APIView):
 
         if generate:
             generate_invoices_for_hungry(start_date, end_date, location)
-            push_hungry_invoices_to_lark_from_history(start_date, end_date)
+            # push_hungry_invoices_to_lark_from_history(start_date, end_date)
             return Response("Invoice Generated")
         else:
             # Filter by date range if start_date and end_date are provided

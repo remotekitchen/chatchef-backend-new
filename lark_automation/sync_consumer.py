@@ -8,7 +8,9 @@ DJANGO_API_URL = "https://api.hungrytiger.chatchefs.com/api/billing/v1/customer-
 LARK_APP_ID = "cli_a8030393dd799010"
 LARK_APP_SECRET = "8ZuSlhJWZrXCcyHHOkU3kfHF2BlPGKrY"
 LARK_BASE_ID = "Ms7dbtQTfaew87s3OHfuRGRZsze"
-LARK_TABLE_ID = "tblFxuj0nWD8U8ay"
+
+LARK_TABLE_ID = "tblrssqND91wnmdC"
+
 
 
 def get_lark_token():
