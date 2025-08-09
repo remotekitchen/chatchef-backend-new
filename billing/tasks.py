@@ -1006,3 +1006,23 @@ def setup_periodic_task():
         print(f"✅ Created periodic task: {task_name}")
     else:
         print(f"🔁 Periodic task '{task_name}' already exists and was updated.")
+
+
+
+# tasks.py
+
+from lark_automation.sync_ht_payout import push_all_hungry_invoices_to_lark
+from lark_automation.sync_DO_calculation import push_DO_invoices_to_lark
+
+
+@shared_task
+def sync_all_hungry_invoices_to_lark():
+    print("🚀 Starting full Hungry invoice sync to Lark...")
+    push_all_hungry_invoices_to_lark()
+    print("✅ Sync finished.")
+
+
+@app.task
+def sync_all_do_invoices_to_lark():
+    push_DO_invoices_to_lark()
+
