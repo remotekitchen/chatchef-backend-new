@@ -3616,6 +3616,8 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
         return {
             "id": user.id,
             "email": user.email,
+            "first_name": user.first_name or "",
+            "last_name": user.last_name or "",
             "phone": user.phone,
             "is_blocked": user.is_blocked,
             "is_email_verified": user.is_email_verified,
@@ -3738,6 +3740,7 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
             "lucky_flip_gift": order.lucky_flip_gift,
             "dropoff_address_details": self._serialize_address(order.dropoff_address_details),
             "pickup_address_details":  self._serialize_address(order.pickup_address_details),
+            
 
 
         }
