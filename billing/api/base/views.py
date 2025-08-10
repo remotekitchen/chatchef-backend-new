@@ -3738,6 +3738,94 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
         return order_data
 
 
+
+class BasePendingOrdersAPIView(BaseOrderDetailsWithHistoryAPIView):
+    def get(self, request):
+        # All your same parameters
+        order_id = request.query_params.get("order_id")
+        user_id = request.query_params.get("user_id")
+        date_filter = request.query_params.get("date", "today")
+
+        today = timezone.now().date()
+        if date_filter == "today":
+            start_date = today
+            end_date = today
+        elif date_filter == "yesterday":
+            start_date = today - timedelta(days=1)
+            end_date = start_date
+        elif date_filter == "last7days":
+            start_date = today - timedelta(days=6)
+            end_date = today
+        elif date_filter == "custom":
+            try:
+                start_date = datetime.strptime(request.query_params.get("start_date"), "%Y-%m-%d").date()
+                end_date = datetime.strptime(request.query_params.get("end_date"), "%Y-%m-%d").date()
+            except Exception:
+                return Response({"error": "Invalid custom date range."}, status=400)
+        else:
+            return Response({"error": "Invalid date filter."}, status=400)
+
+        today_start = timezone.make_aware(datetime.combine(start_date, time.min))
+        today_end = timezone.make_aware(datetime.combine(end_date, time.max))
+
+        # live orders logic stays same
+        if request.query_params.get("live") == "true":
+            live_orders = Order.objects.select_related("user", "restaurant").filter(
+                restaurant__is_remote_Kitchen=True,
+                receive_date__range=(today_start, today_end),
+                status=Order.StatusChoices.PENDING
+            ).order_by("-receive_date")
+
+            data = [self._serialize_order(order, include_history=False) for order in live_orders]
+
+            return Response({
+                "date": today.isoformat(),
+                "live_orders": data,
+                "total": live_orders.count()
+            })
+
+        # single order fetch
+        if order_id:
+            order = get_object_or_404(
+                Order.objects.select_related("user", "restaurant"),
+                order_id=order_id,
+                restaurant__is_remote_Kitchen=True,
+                status=Order.StatusChoices.PENDING
+            )
+            return Response(self._serialize_order(order, include_history=True))
+
+        # user-specific fetch
+        if user_id:
+            orders = Order.objects.select_related("user", "restaurant").filter(
+                user_id=user_id,
+                status=Order.StatusChoices.PENDING
+            ).order_by("-receive_date")
+
+            if not orders.exists():
+                return Response({"error": "No pending orders found for this user."}, status=404)
+
+            return Response({
+                "user": self._serialize_user(orders[0].user),
+                "orders": [self._serialize_order(o, include_history=False) for o in orders]
+            })
+
+        # only pending orders in the main list
+        pending_orders = Order.objects.select_related("user", "restaurant").filter(
+            restaurant__is_remote_Kitchen=True,
+            receive_date__range=(today_start, today_end),
+            status=Order.StatusChoices.PENDING
+        ).order_by("-receive_date")
+
+        return Response({
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat()
+            },
+            "orders": [self._serialize_order(o, include_history=False) for o in pending_orders],
+            "total": pending_orders.count()
+        })
+
+
 class BaseExportUserOrderExcelAPIView(APIView):
     permission_classes = []
 
