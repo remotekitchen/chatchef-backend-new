@@ -3633,6 +3633,26 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
             "address": str(user.address) if user.address else None,
             "role": user.role
         }
+    
+    def _serialize_address(self, addr):
+        if not addr:
+            return None
+        # include exactly what you need from your Address model
+        return {
+            "id": addr.id,
+            "label": getattr(addr, "label", None),
+            "full_address": getattr(addr, "full_address", None) or getattr(addr, "address_line", None),
+            "street_number": getattr(addr, "street_number", None),
+            "street_name": getattr(addr, "street_name", None),
+            "city": getattr(addr, "city", None),
+            "state": getattr(addr, "state", None),
+            "zip": getattr(addr, "zip", None),
+            "country": getattr(addr, "country", None),
+            "lat": getattr(addr, "lat", None),
+            "lng": getattr(addr, "lng", None),
+            "business_name": getattr(addr, "business_name", None),
+            "is_default": getattr(addr, "is_default", None),
+        }
 
     def _serialize_restaurant(self, restaurant):
         if not restaurant:
@@ -3716,6 +3736,10 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
             "tips": order.tips,
             "receive_date": order.receive_date,
             "lucky_flip_gift": order.lucky_flip_gift,
+            "dropoff_address_details": self._serialize_address(order.dropoff_address_details),
+            "pickup_address_details":  self._serialize_address(order.pickup_address_details),
+
+
         }
 
         order_data.update({
