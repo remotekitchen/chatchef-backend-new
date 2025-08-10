@@ -389,9 +389,11 @@ def send_scheduled_notifications():
     tokens = [token_obj.token for token_obj in fcmTokens]
 
     # print("fcmTokens ------ 100", tokens)
+    print("restaurants", restaurants)
     for restaurant in restaurants:
-        campaigns = PromotionalCampaign.objects.filter(restaurant=restaurant, is_active=True)
 
+        campaigns = PromotionalCampaign.objects.filter(restaurant=restaurant, is_active=True)
+        print("campaigns", campaigns)
         for campaign in campaigns:
             schedule = campaign.schedule_times  # Assume this is a dictionary { "YYYY-MM-DD": ["HH:MM"] }
 
@@ -412,11 +414,11 @@ def send_scheduled_notifications():
                                 "id": restaurant.id if restaurant else None  
                             }
                         
-                        # print("recipients ----- 99", recipients)
+                        print("recipients-----99", recipients)
+                        recipients1 = ["f07sDF18b7OCMt2AT_46XM:APA91bH2db856JXIhDJZBbyTNzp0A0TvZvmL9W4ACBSYYZuRqb31ecf3BYfq5BgnPM_bOqMCdey2qvHj7PXRXVQB_bxdVTOPTpvgFTFTDf_Z8xenVBIEsqk"]
+                        send_push_notification(recipients1, data)
 
-                        send_push_notification(recipients, data)
-
-    print("✅ Notification task completed successfully!")
+    print("✅ Notification task completed successfully!@@")
 
 
 @shared_task
@@ -445,8 +447,9 @@ def send_scheduled_notifications():
         restaurants = Restaurant.objects.all()
         fcmTokens = TokenFCM.objects.all()
         tokens = [token_obj.token for token_obj in fcmTokens]
-
+        print("restaurants", restaurants)
         for restaurant in restaurants:
+            print("im inside restaurant")
             campaigns = PromotionalCampaign.objects.filter(restaurant=restaurant, is_active=True)
 
             for campaign in campaigns:
@@ -465,8 +468,10 @@ def send_scheduled_notifications():
                                 "screen": "restaurant",
                                 "id": restaurant.id
                             }
-                            send_push_notification(tokens, data)
-        print("✅ Notification task completed successfully!")
+                            tokens1 =["c90A-dzlu9rNo6k1oRCkdj:APA91bFGXBZ7FZquGHocGTArobc7R3gZVZJuAQGxL6kfaH0VRY_76fmuXbE6ehyT9aD4D9xnOJgwNOlk1Nf4soEGE5jmgWgA2UgZL79s3x6dP-ri-Wl8wdM"]
+                            print("tokens1",tokens1)
+                            send_push_notification(tokens1, data)
+        print("✅ Notification task completed successfully!!!")
     finally:
         cache.delete(lock_id)
 
