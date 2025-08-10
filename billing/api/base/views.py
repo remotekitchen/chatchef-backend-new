@@ -3523,6 +3523,196 @@ class BaseOrderDeliveryExpenseAPI(APIView):
     #     return Response(serializer.data)
     
 
+class BaseOrderDetailsWithHistoryAPIView(APIView):
+    def get(self, request):
+        order_id = request.query_params.get("order_id")
+        user_id = request.query_params.get("user_id")
+
+        today = timezone.now().date()
+        today_start = timezone.make_aware(datetime.combine(today, time.min))
+        today_end = timezone.make_aware(datetime.combine(today, time.max))
+
+        if request.query_params.get("live") == "true":
+            live_orders = Order.objects.select_related("user", "restaurant").filter(
+                restaurant__is_remote_Kitchen=True,
+                receive_date__range=(today_start, today_end),
+                status__in=[
+                    Order.StatusChoices.PENDING,
+                    Order.StatusChoices.IN_PROGRESS
+                ]
+            ).order_by("-receive_date")
+
+            data = [self._serialize_order(order, include_history=False) for order in live_orders]
+
+            return Response({
+                "date": today.isoformat(),
+                "live_orders": data,
+                "total": live_orders.count()
+            })
+
+        if order_id:
+            order = get_object_or_404(
+                Order.objects.select_related("user", "restaurant"),
+                order_id=order_id,
+                restaurant__is_remote_Kitchen=True
+            )
+            return Response(self._serialize_order(order, include_history=True))
+
+        if user_id:
+            orders = Order.objects.select_related("user", "restaurant").filter(
+                user_id=user_id
+            ).order_by("-receive_date")
+
+            if not orders.exists():
+                return Response({"error": "No orders found for this user."}, status=404)
+
+            return Response({
+                "user": self._serialize_user(orders[0].user),
+                "orders": [self._serialize_order(o, include_history=False) for o in orders]
+            })
+
+        today_orders = Order.objects.select_related("user", "restaurant").filter(
+            restaurant__is_remote_Kitchen=True,
+            receive_date__range=(today_start, today_end)
+        ).order_by("-receive_date")
+
+        return Response({
+            "date": today.isoformat(),
+            "orders": [self._serialize_order(o, include_history=False) for o in today_orders],
+            "total": today_orders.count()
+        })
+
+    def _serialize_user(self, user):
+        if not user:
+            return None
+        return {
+            "id": user.id,
+            "email": user.email,
+            "phone": user.phone,
+            "is_blocked": user.is_blocked,
+            "is_email_verified": user.is_email_verified,
+            "is_phone_verified": user.is_phone_verified,
+            "date_of_birth": str(user.date_of_birth) if user.date_of_birth else None,
+            "reward_points": user.reward_points,
+            "direct_order_only": user.direct_order_only,
+            "agree": user.agree,
+            "uid": str(user.uid) if user.uid else None,
+            "is_sales": user.is_sales,
+            "super_power": user.super_power,
+            "is_get_600": user.is_get_600,
+            "hotel_admin": user.hotel_admin,
+            "order_count_total_rk": user.order_count_total_rk,
+            "address": str(user.address) if user.address else None,
+            "role": user.role
+        }
+
+    def _serialize_restaurant(self, restaurant):
+        if not restaurant:
+            return None
+        return {
+            "id": restaurant.id,
+            "name": restaurant.name,
+            "location": str(restaurant.location) if restaurant.location else None,
+            "phone": restaurant.phone,
+            "email": restaurant.email,
+            "logo": restaurant.logo.url if restaurant.logo else None,
+            "avatar_image": restaurant.avatar_image.image.url if restaurant.avatar_image and restaurant.avatar_image.image else None,
+            "banner_images": [img.image.url for img in restaurant.banner_image.all() if img.image],
+            "total_sales": float(restaurant.boosted_total_gross_revenue or 0),
+            "delivery_fee": restaurant.delivery_fee,
+            "discount_percentage": float(restaurant.discount_percentage or 0),
+            "accept_scheduled_order": restaurant.accept_scheduled_order,
+            "is_remote_Kitchen": restaurant.is_remote_Kitchen,
+            "store_type": restaurant.store_type,
+            "timezone": restaurant.timezone,
+            "bag_price": restaurant.bag_price,
+            "utensil_price": restaurant.utensil_price,
+            "order_methods": restaurant.order_methods,
+            "payment_methods": restaurant.payment_methods,
+            "payment_methods_pickup": restaurant.payment_methods_pickup,
+            "service_fee": restaurant.service_fee,
+            "use_delivery_inflation": restaurant.use_delivery_inflation,
+            "auto_accept_orders": restaurant.auto_accept_orders,
+            "voucher_restriction": restaurant.voucher_restriction,
+            "boosted_total_sales_count": restaurant.boosted_total_sales_count,
+            "boosted_monthly_sales_count": restaurant.boosted_monthly_sales_count,
+            "boosted_average_ticket_size": float(restaurant.boosted_average_ticket_size or 0),
+            "priority": restaurant.priority,
+        }
+
+    def _extract_order_items(self, order):
+        items = []
+        raw_items = order.order_item_meta_data or []
+
+        for item in raw_items:
+            menu_item = item.get("menu_item", {})
+            items.append({
+                "id": item.get("id"),
+                "order_id": item.get("order"),
+                "quantity": item.get("quantity"),
+                "menu_item_id": menu_item.get("id"),
+                "name": menu_item.get("name"),
+                "base_price": menu_item.get("base_price"),
+                "virtual_price": menu_item.get("virtual_price"),
+                "original_price": menu_item.get("original_price"),
+                "modifiers": item.get("modifiers", []),
+                "created_date": item.get("created_date"),
+                "modified_date": item.get("modified_date"),
+            })
+        return items
+
+    def _serialize_order(self, order, include_history=False):
+        order_data = {
+            "id": order.id,
+            "order_id": order.order_id,
+            "user_id": order.user_id,
+            "restaurant_id": order.restaurant_id,
+            "status": order.status,
+            "order_method": order.order_method,
+            "payment_method": order.payment_method,
+            "total": order.total,
+            "tax": order.tax,
+            "delivery_fee": order.delivery_fee,
+            "original_delivery_fee": order.original_delivery_fee,
+            "discount": order.discount,
+            "special_discount": order.special_discount,
+            "special_discount_reason": order.special_discount_reason,
+            "stripe_fee": order.stripe_fee,
+            "service_fee_restaurant": order.service_fee_restaurant if hasattr(order, 'service_fee_restaurant') else None,
+            "service_fee_chatchefs": order.service_fee_chatchefs if hasattr(order, 'service_fee_chatchefs') else None,
+            "ht_delivery_fee_expense": order.ht_delivery_fee_expense,
+            "customer_delivery_fee_absorb": order.customer_delivery_fee_absorb if hasattr(order, 'customer_delivery_fee_absorb') else None,
+            "admin_received_cash": float(order.admin_received_cash) if order.admin_received_cash else 0,
+            "bag_fee": order.bag_price,
+            "utensil_fee": order.utensil_price,
+            "tips": order.tips,
+            "receive_date": order.receive_date,
+            # "created_at": order.created_at,
+            # "updated_at": order.updated_at,
+            "lucky_flip_gift": order.lucky_flip_gift,
+        }
+
+        order_data.update({
+            "user": self._serialize_user(order.user),
+            "restaurant": self._serialize_restaurant(order.restaurant),
+            "items": self._extract_order_items(order)
+        })
+
+        if include_history:
+            order_data["user_order_history"] = [
+                {
+                    "order_id": o.order_id,
+                    "receive_date": o.receive_date,
+                    "status": o.status,
+                    "total_amount": o.total,
+                }
+                for o in Order.objects.filter(user=order.user).exclude(id=order.id).order_by("-receive_date")
+            ]
+
+        return order_data
+
+
+
 
 
 class BaseExportUserOrderExcelAPIView(APIView):
