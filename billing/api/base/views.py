@@ -3527,10 +3527,30 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
     def get(self, request):
         order_id = request.query_params.get("order_id")
         user_id = request.query_params.get("user_id")
+        status_filter = request.query_params.get("status")
+        date_filter = request.query_params.get("date", "today")
 
         today = timezone.now().date()
-        today_start = timezone.make_aware(datetime.combine(today, time.min))
-        today_end = timezone.make_aware(datetime.combine(today, time.max))
+        if date_filter == "today":
+            start_date = today
+            end_date = today
+        elif date_filter == "yesterday":
+            start_date = today - timedelta(days=1)
+            end_date = start_date
+        elif date_filter == "last7days":
+            start_date = today - timedelta(days=6)
+            end_date = today
+        elif date_filter == "custom":
+            try:
+                start_date = datetime.strptime(request.query_params.get("start_date"), "%Y-%m-%d").date()
+                end_date = datetime.strptime(request.query_params.get("end_date"), "%Y-%m-%d").date()
+            except Exception:
+                return Response({"error": "Invalid custom date range."}, status=400)
+        else:
+            return Response({"error": "Invalid date filter."}, status=400)
+
+        today_start = timezone.make_aware(datetime.combine(start_date, time.min))
+        today_end = timezone.make_aware(datetime.combine(end_date, time.max))
 
         if request.query_params.get("live") == "true":
             live_orders = Order.objects.select_related("user", "restaurant").filter(
@@ -3574,10 +3594,18 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
         today_orders = Order.objects.select_related("user", "restaurant").filter(
             restaurant__is_remote_Kitchen=True,
             receive_date__range=(today_start, today_end)
-        ).order_by("-receive_date")
+        )
+
+        if status_filter:
+            today_orders = today_orders.filter(status=status_filter)
+
+        today_orders = today_orders.order_by("-receive_date")
 
         return Response({
-            "date": today.isoformat(),
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat()
+            },
             "orders": [self._serialize_order(o, include_history=False) for o in today_orders],
             "total": today_orders.count()
         })
@@ -3687,8 +3715,6 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
             "utensil_fee": order.utensil_price,
             "tips": order.tips,
             "receive_date": order.receive_date,
-            # "created_at": order.created_at,
-            # "updated_at": order.updated_at,
             "lucky_flip_gift": order.lucky_flip_gift,
         }
 
@@ -3710,9 +3736,6 @@ class BaseOrderDetailsWithHistoryAPIView(APIView):
             ]
 
         return order_data
-
-
-
 
 
 class BaseExportUserOrderExcelAPIView(APIView):
