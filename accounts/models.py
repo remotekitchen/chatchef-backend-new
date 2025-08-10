@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.generics import get_object_or_404
+import secrets
 
 from accounts.managers import UserManager
 from core.models import BaseAddress, BaseModel
@@ -534,3 +535,24 @@ class RedZone(models.Model):
 
     def __str__(self):
         return self.name
+
+
+
+# models.py
+class QuickLoginUser(models.Model):
+    name = models.CharField(max_length=100, blank=True, help_text="Full name of the user")
+    email = models.EmailField(unique=True)
+    password = models.CharField(max_length=128)
+    label = models.CharField(max_length=100, blank=True, help_text="Optional description or role")
+    fcm_token = models.CharField(max_length=256, blank=True, null=True)
+    token = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    is_active = models.BooleanField(default=True, help_text="Disable to prevent login")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name or self.email} ({self.label})"
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = secrets.token_hex(32)
+        super().save(*args, **kwargs)

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from threading import Thread, Timer
 from django.utils.timezone import now
 from marketing.utils.send_sms import send_sms_bd
+from accounts.models import QuickLoginUser
 
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
@@ -452,92 +453,33 @@ def safe_create_delivery(instance):
     except Exception as e:
         print(f"Delivery creation failed for Order {instance.id}: {e}")
 
-# @receiver(post_save, sender=Order)
-# def send_sms_on_order_created(sender, instance, created, **kwargs):
-#     if not created:
-#         return
 
-#     def _send_sms():
-#         if ENV_TYPE != "DEVELOPMENT":
-#             print("SMS not sent (non-production)")
-#             return
 
-#         if not instance.restaurant.is_remote_Kitchen:
-#             print("Restaurant is not remote kitchen, SMS not sent.")
-#             return
+@receiver(post_save, sender=Order)
+def notify_quick_login_users_on_order(sender, instance, created, **kwargs):
+    if not created:
+        return
 
-#         # Mapping of phone numbers to (name, greeting)
-#         sms_recipients = {
-#             # "01711690821": {"name": "Amena", "greeting": "Hey Sweet"},
-#             "01980796731": {"name": "Sohag", "greeting": "Dear"},
-#             # "01334923595": {"name": "Chion", "greeting": "Hi"},
-#         }
+    quick_users = QuickLoginUser.objects.filter(
+        is_active=True,
+    ).exclude(fcm_token__isnull=True).exclude(fcm_token="")
 
-#         order_mode = instance.get_order_method_display().upper()
-#         order_type_label = (
-#             "🛍️ Pickup Order"
-#             if instance.order_method == Order.OrderMethod.PICKUP
-#             else "🚚 Delivery Order"
-#         )
-#         order_time = (
-#             instance.receive_date_ht.strftime("%Y-%m-%d %H:%M")
-#             if instance.receive_date_ht
-#             else "N/A"
-#         )
-#         voucher_code = instance.solid_voucher_code or "None"
-#         payment_method = instance.get_payment_method_display().upper()
-#         platform = (
-#             instance.get_delivery_platform_display()
-#             if instance.delivery_platform
-#             else "N/A"
-#         )
+    tokens = [user.fcm_token for user in quick_users]
 
-#         # Get ordered items from related model
-#         ordered_items = instance.orderitem_set.all()
+    if not tokens:
+        return
+    print("tokens------90", tokens)
+    send_push_notification(
+        tokens=tokens,
+        data={
+            "campaign_title": "New Order Placed",
+            "campaign_message": f"Order #{instance.id} was just placed.",
+            "campaign_image": "",  # or a valid image URL
+            "campaign_category": "orders",
+            "campaign_is_active": "true",
+            "restaurant_name": getattr(instance, "restaurant", None).name if hasattr(instance, "restaurant") else "Hungry Tiger",
+            "screen": "OrderDetails",
+            "id": str(instance.id),
+        }
+    )
 
-#         if not ordered_items:
-#             items_text = "❌ No items found."
-#         else:
-#             items_text = ""
-#             for i, item in enumerate(ordered_items, start=1):
-#                 item_name = item.menu_item.name if item.menu_item else "Item"
-#                 qty = item.quantity
-#                 discount = (
-#                     f"{item.discount_amount} off"
-#                     if getattr(item, "discount_amount", 0)
-#                     else "No discount"
-#                 )
-#                 items_text += f"\n{i}. {item_name} x{qty} ({discount})"
-
-#         for phone, info in sms_recipients.items():
-#             name = info["name"]
-#             greeting = info["greeting"]
-
-#             text = (
-#                 f"{order_type_label} 🌟\n\n"
-#                 f"{greeting} {name}! 🌈✨\n\n"
-#                 f"🔥 A fresh order has landed in your kingdom!\n\n"
-#                 f"🏪 *Restaurant:* {instance.restaurant.name}\n"
-#                 f"🆔 *Order ID:* {instance.order_id}\n"
-#                 f"🕒 *Time:* {order_time}\n"
-#                 f"🛒 *Mode:* {order_mode}\n"
-#                 f"💳 *Payment:* {payment_method}\n"
-#                 f"🎟️ *Voucher:* {voucher_code}\n"
-#                 f"🛵 *Platform:* {platform}\n\n"
-#                 f"👤 *Customer:* {instance.customer}\n"
-#                 f"📞 *Phone:* {instance.dropoff_phone_number}\n"
-#                 f"📍 *Address:* {instance.dropoff_address}\n\n"
-#                 f"📝 *Items:*{items_text}\n\n"
-#                 f"💰 *Total:* {instance.total} {instance.currency.upper()}\n\n"
-#                 f"🙏 You’re simply the best.\n"
-#                 f"💪 Keep rocking it!"
-#             )
-
-#             try:
-#                 res = send_sms_bd(phone, text)
-#                 response = res.json()
-#                 print(f"SMS sent to {phone}: {response}")
-#             except Exception as e:
-#                 print(f"SMS failed for {phone}: {e}")
-
-#     transaction.on_commit(_send_sms)
