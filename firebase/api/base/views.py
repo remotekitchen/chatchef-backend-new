@@ -55,34 +55,55 @@ class FCMTokenViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        user = request.user
         token = request.data.get("token")
         device_type = request.data.get("device_type", "web")
 
-        # Check if this token already exists
-        existing_token = TokenFCM.objects.filter(token=token).first()
-        
+        if not token:
+            return Response({"detail": "token is required"}, status=400)
+
+        # If token exists → keep its original owner
+        existing_token = TokenFCM.objects.select_related("user").filter(token=token).first()
         if existing_token:
-            existing_token.user = user
-            existing_token.device_type = device_type
-            existing_token.save()
-            return Response({"message": "Token reassigned to current user", "token_id": existing_token.id})
+            user = existing_token.user  # take from existing token
+            if device_type and existing_token.device_type != device_type:
+                existing_token.device_type = device_type
+                existing_token.save(update_fields=["device_type"])
+            return Response({
+                "message": "Token already registered; using existing token owner",
+                "token_id": existing_token.id,
+                "user_id": user.id,
+                "device_type": existing_token.device_type,
+            })
 
-        # 🔴 Remove this line to keep previous tokens
-        # TokenFCM.objects.filter(user=user, device_type=device_type).delete()
-
-        # Create a new token entry without deleting the old one
-        fcm_token = TokenFCM.objects.create(user=user, token=token, device_type=device_type)
-
-        return Response({"message": "Token registered successfully", "token_id": fcm_token.id})
+        # If token is new → assign to current authenticated user
+        fcm_token = TokenFCM.objects.create(
+            user=request.user,
+            token=token,
+            device_type=device_type
+        )
+        return Response({
+            "message": "Token registered successfully",
+            "token_id": fcm_token.id,
+            "user_id": request.user.id,
+            "device_type": device_type,
+        })
 
     @action(detail=False, methods=["GET"])
     def get_user_tokens(self, request):
         """Retrieve all FCM tokens for the authenticated user"""
-        user = request.user
-        tokens = TokenFCM.objects.filter(user=user).values("id", "token", "device_type")
-
+        tokens = TokenFCM.objects.filter(user=request.user).values("id", "token", "device_type")
         return Response({"tokens": list(tokens)})
+
+    @action(detail=False, methods=["GET"])
+    def resolve_user(self, request):
+        """Get user info from a given token"""
+        token = request.query_params.get("token")
+        if not token:
+            return Response({"detail": "token is required"}, status=400)
+        obj = TokenFCM.objects.select_related("user").filter(token=token).first()
+        if not obj:
+            return Response({"detail": "token not found"}, status=404)
+        return Response({"user_id": obj.user_id, "device_type": obj.device_type})
 
 
 
@@ -99,7 +120,7 @@ class SendNotificationView(APIView):
 
         # Fetch all tokens for the current authenticated user
         tokens = list(TokenFCM.objects.filter(user=user).values_list("token", flat=True))
-        print("tokens", tokens)
+        print("tokens", tokens, user.id)
 
         # If `send_to_all` is False and `fcm_token` is provided, send to only that token
         if not send_to_all and fcm_token:
