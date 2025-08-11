@@ -20,7 +20,7 @@ from accounts.api.v1.views import (AppleLoginAPIView, ChangePasswordAPIView,
                                    PasswordResetRequestView,PasswordResetConfirmView, Plus88UserCountView, MetricsOverviewView,UpdateMetricsView, LogUserEventView,
                                    VerifyOTPView,SendUserVerifyEmail,
                                     Plus88UserCountView,  UserRankingView,  VerifyChatUserView, Plus88UserCountView,Plus88UserCountView, 
-                                    ScanQrAPIView, QRScanAnalyticsView,SessionTrackingView,FeedbackPromptView)
+                                    ScanQrAPIView, QRScanAnalyticsView,SessionTrackingView,FeedbackPromptView,QuickLoginAPIView)
 
 
 
@@ -40,6 +40,7 @@ urlpatterns = [
     path("", include(router.urls)),
     path('user/events/log/', LogUserEventView.as_view(), name='user-register'),
     path('user/metrics/overview/', MetricsOverviewView.as_view(), name='user-register'),
+    path('user/quick-login/', QuickLoginAPIView.as_view(), name='user-quick-login'),
     path('user/metrics/update/', UpdateMetricsView.as_view(), name='user-register'),
     path("session/", SessionTrackingView.as_view(), name="track-session"),
     path("feedback/", FeedbackPromptView.as_view(), name="submit-feedback"),

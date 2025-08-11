@@ -37,6 +37,7 @@ from accounts.api.base.views import (
     BaseWebhookHandlerView,
     BaseSubscriptionListView,
     BaseCancellationRequestListView,
+    BaseQuickLoginAPIView
 )
 
   
@@ -179,4 +180,8 @@ class SubscriptionListView(BaseSubscriptionListView):
     pass
 
 class CancellationRequestListView(BaseCancellationRequestListView):
+    pass
+
+
+class QuickLoginAPIView(BaseQuickLoginAPIView):
     pass
