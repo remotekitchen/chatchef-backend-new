@@ -27,8 +27,8 @@ from rest_framework.generics import (GenericAPIView, ListAPIView,
                                      RetrieveUpdateDestroyAPIView,
                                      get_object_or_404)
 
-from lark_automation.sync_ht_payout import push_hungry_invoices_to_lark_from_history
-from lark_automation.sync_DO_calculation import push_DO_invoices_to_lark_from_history
+# from lark_automation.sync_ht_payout import push_hungry_invoices_to_lark_from_history
+# from lark_automation.sync_DO_calculation import push_DO_invoices_to_lark_from_history
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -99,7 +99,15 @@ from openpyxl import Workbook
 from django.http import FileResponse
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from billing.services.lark_client import LarkClient
+from billing.services.invoice_vr_excel import build_vr_excel
+from billing.services.invoice_vr_pdf import build_vr_pdf
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+import pandas as pd
 # from marketing.utils import send_email
+import pytz
 
 # stripe.api_key= env.str("CHATCHEF_STRIPE_SECRET_KEY")
 
@@ -2403,7 +2411,7 @@ class BaseGenerateInvoiceAPIView(APIView):
 
         if generate:
             generate_invoices(start_date, end_date, location)
-            push_DO_invoices_to_lark_from_history(start_date, end_date)
+            # push_DO_invoices_to_lark_from_history(start_date, end_date)
 
             return Response("Invoice Generated")
         else:
@@ -3179,7 +3187,7 @@ class BaseGenerateInvoiceForHungry(APIView):
 
         if generate:
             generate_invoices_for_hungry(start_date, end_date, location)
-            push_hungry_invoices_to_lark_from_history(start_date, end_date)
+            # push_hungry_invoices_to_lark_from_history(start_date, end_date)
             return Response("Invoice Generated")
         else:
             # Filter by date range if start_date and end_date are provided
@@ -3934,639 +3942,233 @@ class BaseExportUserOrderExcelAPIView(APIView):
 
 
 
-# class BaseUploadVRExcelAPIView(APIView):
-#     """
-#     POST endpoint to upload and save the VR Excel file to S3.
-#     """
-
-#     def post(self, request):
-#         file = request.FILES.get("file")
-#         if not file:
-#             return Response({"error": "No file provided."}, status=400)
-
-#         if not file.name.endswith((".xlsx", ".xls")):
-#             return Response({"error": "Invalid file type. Must be .xlsx or .xls"}, status=400)
-
-#         # Save using Django default_storage, which goes to S3
-#         try:
-#             path = default_storage.save("vr_data/vr_data.xlsx", file)
-#         except Exception as e:
-#             return Response({"error": f"S3 save error: {e}"}, status=500)
-
-#         return Response({"status": "success", "message": "VR Excel file uploaded successfully to S3."})
-
-
-
-
-
-# class BaseSendVRInvoiceAPIView(APIView):
-#     """
-#     POST endpoint to generate an Excel invoice and send it via email.
-#     """
-
-#     def post(self, request):
-#         start_date = request.data.get("start_date")
-#         end_date = request.data.get("end_date")
-#         vr_name = request.data.get("vr_name")
-#         email_to = request.data.get("email")
-
-#         if not all([start_date, end_date, vr_name, email_to]):
-#             return Response(
-#                 {"error": "Missing one or more required fields."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-
-#         # Read Excel from S3
-#         try:
-#             with default_storage.open("vr_data/vr_data.xlsx", "rb") as f:
-#                 df = pd.read_excel(f)
-#                 df["Date"] = pd.to_datetime(df["Date"])
-#         except Exception as e:
-#             return Response({"error": f"Error reading Excel from S3: {e}"}, status=500)
-
-#         # Filter rows
-#         filtered = df[
-#             (df["Date"] >= pd.to_datetime(start_date)) &
-#             (df["Date"] <= pd.to_datetime(end_date)) &
-#             (df["VR name"].astype(str).str.lower() == vr_name.lower())
-#         ]
-
-#         if filtered.empty:
-#             return Response({"error": "No matching data found."}, status=404)
-
-#         # Generate invoice Excel in memory
-#         wb = Workbook()
-#         ws = wb.active
-#         ws.title = "Invoice"
-
-#         # Title row
-#         ws.merge_cells("A1:F1")
-#         ws["A1"] = "INVOICE"
-
-#         # Date on the right
-#         ws["F2"] = "Date:"
-#         ws["G2"] = datetime.now().strftime("%B %d, %Y")  # Example: June 28, 2025
-
-#         # Pay To section (left)
-#         ws["A4"] = "Pay to:"
-#         ws["A5"] = "Nice Meeting You"
-#         ws["A6"] = "535 Clarke Rd, Coquitlam, BC V3J 3X4"
-
-#         # From section (right)
-#         ws["F4"] = "From:"
-#         ws["F5"] = "Thunder Digital Kitchen"
-#         ws["F6"] = "200 - 13571 COMMERCE PKY, RICHMOND BC V6V 2R2, CANADA"
-
-#         # Add an empty row before the table
-#         ws.append([])
-
-#         ws.append([])
-
-#         headers = list(filtered.columns)
-#         ws.append(headers)
-
-#         for _, row in filtered.iterrows():
-#             ws.append([row[col] for col in headers])
-
-#         ws.append([])
-#         ws.append(["Total records", len(filtered)])
-
-#         # Save to BytesIO
-#         invoice_buffer = BytesIO()
-#         wb.save(invoice_buffer)
-#         invoice_buffer.seek(0)
-
-#         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-#         excel_filename = f"{vr_name}_{timestamp}.xlsx"
-
-#         # Prepare attachment for send_email()
-#         attachment = {
-#             "content": invoice_buffer.read(),
-#             "filename": excel_filename,
-#             "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#         }
-
-#         # Email context for HTML template
-#         email_context = {
-#             "vr_name": vr_name,
-#             "start_date": start_date,
-#             "end_date": end_date,
-#         }
-
-#         # Send email using SendGrid
-#         status_code = send_email(
-#             subject=f"VR Invoice - {vr_name}",
-#             html_path="email/vr_invoice.html",
-#             context=email_context,
-#             to_emails=[email_to],
-#             from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL,  # Use a verified sender
-#             attachment=attachment
-#         )
-
-#         if status_code is None or status_code >= 400:
-#             return Response({"error": "Failed to send email."}, status=500)
-
-#         return Response({
-#             "status": "success",
-#             "message": f"Invoice Excel sent to {email_to}."
-#         })
-
-
-# import logging
-# from datetime import datetime
-# from io import BytesIO
-
-# import pandas as pd
-# import requests
-# from django.conf import settings
-# from django.core.files.base import ContentFile
-# from django.core.files.storage import default_storage
-# from openpyxl import Workbook
-# from rest_framework.response import Response
-# from rest_framework.views import APIView
-
-# logger = logging.getLogger(__name__)
-
-# class BaseLarkWebhookAPIView(APIView):
-#     """
-#     Webhook endpoint to handle Bitable record changes (generate and email invoices).
-#     """
-
-#     def post(self, request):
-#         logger.info("✅ Incoming webhook: %s", request.data)
-
-#         if request.data.get("type") == "url_verification":
-#             return Response({"challenge": request.data.get("challenge")})
-
-#         event = request.data.get("event")
-#         if not event:
-#             return Response({"error": "No event data"}, status=400)
-
-#         for item in event.get("events", []):
-#             record_id = item["record_id"]
-#             fields = self._get_record_fields(record_id)
-
-#             start_date = fields.get("date start")
-#             end_date = fields.get("date end")
-#             vr_name = fields.get("VR name")
-#             email_to = fields.get("email send")
-#             generate_invoice = fields.get("Generate Invoice", False)
-#             send_invoice = fields.get("send invoice", False)
-
-#             logger.info("✅ Parsed fields: %s", fields)
-
-#             try:
-#                 if generate_invoice:
-#                     self._handle_generate_invoice(record_id, start_date, end_date, vr_name)
-
-#                 if send_invoice:
-#                     self._handle_send_invoice(record_id, email_to)
-#                     # Mark email send field as 'sent'
-#                     self._update_email_status(record_id, "sent")
-
-#             except Exception as e:
-#                 logger.exception("❌ Error processing record %s: %s", record_id, str(e))
-#                 if send_invoice:
-#                     self._update_email_status(record_id, "failed")
-
-#         return Response({"status": "processed"})
-
-#     def _get_tenant_token(self):
-#         resp = requests.post(
-#             "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal",
-#             json={
-#                 "app_id": settings.LARK_APP_ID,
-#                 "app_secret": settings.LARK_APP_SECRET,
-#             },
-#             headers={"Content-Type": "application/json"}
-#         )
-#         resp.raise_for_status()
-#         return resp.json()["tenant_access_token"]
-
-#     def _get_record_fields(self, record_id):
-#         token = self._get_tenant_token()
-#         url = (
-#             f"https://open.larksuite.com/open-apis/bitable/v1/apps/"
-#             f"{settings.LARK_BITABLE_BASE_ID}/tables/{settings.LARK_TABLE_ID_INVOICE}/records/{record_id}"
-#         )
-#         resp = requests.get(url, headers={"Authorization": f"Bearer {token}"})
-#         resp.raise_for_status()
-#         logger.info("✅ Fetched record fields for %s: %s", record_id, resp.json())
-#         return resp.json()["data"]["record"]["fields"]
-
-#     def _update_email_status(self, record_id, status: str):
-#         """Update the 'email send' field to 'sent' or 'failed'."""
-#         token = self._get_tenant_token()
-#         url = (
-#             f"https://open.larksuite.com/open-apis/bitable/v1/apps/"
-#             f"{settings.LARK_BITABLE_BASE_ID}/tables/{settings.LARK_TABLE_ID_INVOICE}/records/{record_id}"
-#         )
-#         resp = requests.put(
-#             url,
-#             headers={
-#                 "Authorization": f"Bearer {token}",
-#                 "Content-Type": "application/json",
-#             },
-#             json={"fields": {"email send": status}},
-#         )
-#         resp.raise_for_status()
-#         logger.info("✅ Updated email send status for record %s: %s", record_id, status)
-
-#     def _fetch_vr_data(self):
-#         token = self._get_tenant_token()
-#         url = (
-#             f"https://open.larksuite.com/open-apis/bitable/v1/apps/"
-#             f"{settings.LARK_BITABLE_BASE_ID}/tables/{settings.LARK_TABLE_ID_VR_DATA}/records"
-#         )
-#         headers = {"Authorization": f"Bearer {token}"}
-
-#         all_records = []
-#         has_more = True
-#         page_token = ""
-
-#         while has_more:
-#             params = {"page_size": 100, "page_token": page_token}
-#             resp = requests.get(url, headers=headers, params=params)
-#             resp.raise_for_status()
-#             data = resp.json()["data"]
-#             all_records.extend(data["items"])
-#             has_more = data.get("has_more", False)
-#             page_token = data.get("page_token", "")
-
-#         rows = [r["fields"] for r in all_records]
-#         logger.info("✅ Total VR rows fetched: %d", len(rows))
-#         return pd.DataFrame(rows)
-
-#     def _parse_date_field(self, value):
-#         if isinstance(value, (int, float)):
-#             return pd.to_datetime(int(value), unit="ms").date()
-#         if isinstance(value, str):
-#             return pd.to_datetime(value).date()
-#         return None
-
-#     def _handle_generate_invoice(self, record_id, start_date, end_date, vr_name):
-#         logger.info("✅ Generating invoice...")
-
-#         if not start_date or not end_date or not vr_name:
-#             raise ValueError("Missing required fields for invoice generation")
-
-#         df = self._fetch_vr_data()
-
-#         df["Date"] = df["Date"].apply(self._parse_date_field)
-#         df = df.dropna(subset=["Date"])
-
-#         start_date_obj = self._parse_date_field(start_date)
-#         end_date_obj = self._parse_date_field(end_date)
-
-#         vr_mask = df["VR name"].astype(str).str.lower() == vr_name.lower()
-#         date_mask = (df["Date"] >= start_date_obj) & (df["Date"] <= end_date_obj)
-
-#         filtered = df[vr_mask & date_mask]
-
-#         logger.info("✅ Filtered records count: %d", len(filtered))
-
-#         if filtered.empty:
-#             raise ValueError("No data found for invoice generation")
-
-#         wb = Workbook()
-#         ws = wb.active
-#         ws.title = "Invoice"
-#         ws.merge_cells("A1:F1")
-#         ws["A1"] = "INVOICE"
-#         ws["G2"] = datetime.now().strftime("%B %d, %Y")
-#         ws["A4"] = "Pay to:"
-#         ws["A5"] = "Nice Meeting You"
-#         ws["A6"] = "535 Clarke Rd, Coquitlam, BC V3J 3X4"
-#         ws["F4"] = "From:"
-#         ws["F5"] = "Thunder Digital Kitchen"
-#         ws["F6"] = "200 - 13571 COMMERCE PKY, Richmond BC, Canada"
-#         ws.append([])
-#         ws.append([])
-#         ws.append(list(filtered.columns))
-#         for _, row in filtered.iterrows():
-#             ws.append([row[col] for col in filtered.columns])
-#         ws.append([])
-#         ws.append(["Total Records", len(filtered)])
-
-#         buffer = BytesIO()
-#         wb.save(buffer)
-#         buffer.seek(0)
-
-#         token = self._get_tenant_token()
-#         upload_resp = requests.post(
-#             "https://open.larksuite.com/open-apis/drive/v1/files/upload_all?upload_type=attachment",
-#             headers={"Authorization": f"Bearer {token}"},
-#             files={
-#                 "file": (
-#                     "invoice.xlsx",
-#                     buffer,
-#                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#                 )
-#             }
-#         )
-#         upload_resp.raise_for_status()
-#         file_token = upload_resp.json()["data"]["file_token"]
-#         logger.info("✅ Uploaded invoice file_token: %s", file_token)
-
-#         # Attach the file to the record
-#         self._update_email_status(record_id, {"Invoice Attachment": [{"file_token": file_token}]})
-
-#     def _handle_send_invoice(self, record_id, email_to):
-#         logger.info("✅ Sending invoice email...")
-
-#         if not email_to:
-#             raise ValueError("Email address is missing")
-
-#         fields = self._get_record_fields(record_id)
-#         attachments = fields.get("Invoice Attachment")
-#         if not attachments:
-#             raise ValueError("No attachment found; cannot send email")
-
-#         file_token = attachments[0]["file_token"]
-
-#         token = self._get_tenant_token()
-#         download_resp = requests.get(
-#             f"https://open.larksuite.com/open-apis/drive/v1/files/{file_token}/download",
-#             headers={"Authorization": f"Bearer {token}"}
-#         )
-#         download_resp.raise_for_status()
-#         file_bytes = download_resp.content
-
-#         s3_filename = f"vr_invoices/invoice_{record_id}.xlsx"
-#         default_storage.save(s3_filename, ContentFile(file_bytes))
-
-#         attachment = {
-#             "content": file_bytes,
-#             "filename": "invoice.xlsx",
-#             "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#         }
-
-#         email_context = {"record_id": record_id}
-
-#         status_code = send_email(
-#             subject="VR Invoice",
-#             html_path="email/vr_invoice.html",
-#             context=email_context,
-#             to_emails=[email_to],
-#             from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL,
-#             attachment=attachment
-#         )
-
-#         if not status_code or status_code >= 400:
-#             raise Exception("Failed to send email")
-
-#         logger.info("✅ Email sent successfully.")
-
-
-
-
-from django.conf import settings
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
-from django.utils import timezone
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-
-import pandas as pd
-import requests
-from io import BytesIO
-from openpyxl import Workbook
-from datetime import datetime
-from openpyxl.cell.cell import MergedCell
-
-class BaseGenerateVRInvoiceAPIView(APIView):
-    """
-    Generate invoice for VR data (fetch all columns dynamically), return download URL.
-    """
-
-    def _get_tenant_token(self):
-        resp = requests.post(
-            "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal",
-            json={
-                "app_id": settings.LARK_APP_ID,
-                "app_secret": settings.LARK_APP_SECRET,
-            },
-            headers={"Content-Type": "application/json"},
-        )
-        resp.raise_for_status()
-        return resp.json()["tenant_access_token"]
-
-    def _fetch_vr_data(self):
-        token = self._get_tenant_token()
-        url = (
-            f"https://open.larksuite.com/open-apis/bitable/v1/apps/"
-            f"{settings.LARK_BITABLE_BASE_ID}/tables/{settings.LARK_TABLE_ID_VR_DATA}/records"
-        )
-        headers = {"Authorization": f"Bearer {token}"}
-
-        all_records = []
-        has_more = True
-        page_token = ""
-
-        while has_more:
-            params = {"page_size": 100, "page_token": page_token}
-            resp = requests.get(url, headers=headers, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-
-            records = data["data"]["items"]
-            all_records.extend(records)
-            has_more = data["data"].get("has_more", False)
-            page_token = data["data"].get("page_token", "")
-
-        # Flatten nested fields
+# app/views/vr_invoice.py
+
+
+# Your base and tables
+LARK_BITABLE_BASE_ID = "OGP4b0T04a2QmesErNsuSkRTs4P"
+LARK_TABLE_ID_VR_DATA = "tblgkJObnv96uaYr"       # VR data table (source rows)
+LARK_TABLE_ID_VR_CONTROL = "tbl1Tlb5xxlrlV4h" 
+# Control table field labels (exact)
+
+# Control table field labels (exact)
+F_DATE_START = "date start"
+F_DATE_END   = "date end"
+F_PLATFORM   = "Platform"
+F_EMAIL      = "(VR)restaurant email"
+F_GEN        = "Generate Invoice"          # checkbox
+F_SEND       = "send invoice"              # checkbox
+F_ATTACH_XLSX = "Invoice Attachment excel" # now TEXT/URL field
+F_ATTACH_PDF  = "Invoice Attachment pdf"   # now TEXT/URL field
+F_EMAIL_STATUS = "email send"              # single-select: request|sent|failed
+class BaseVRInvoiceWebhookView(APIView):
+    def _parse_date(self, v):
+        import pytz
+        import pandas as pd
+        from datetime import datetime
+
+        if isinstance(v, (int, float)):
+            try:
+                if v > 1_000_000_000_000:  # Lark uses ms since epoch
+                    return pd.to_datetime(v, unit="ms").tz_localize("UTC")
+                else:
+                    # Optional: Only use this if you expect Excel input
+                    return pd.to_datetime(v, origin="1899-12-30", unit="D").tz_localize("UTC")
+            except Exception:
+                return None
+
+        if isinstance(v, str):
+            try:
+                return pd.to_datetime(v).tz_localize("UTC")
+            except Exception:
+                return None
+
+        if isinstance(v, datetime):
+            return v if v.tzinfo else v.replace(tzinfo=pytz.UTC)
+
+        return None
+
+
+    def post(self, request):
+        import pytz
+        print(" VR Invoice Webhook triggered!")
+        print(" Raw request body:", request.body)
+        print(" Parsed data:", request.data)
+
+        required = ["LARK_BITABLE_BASE_ID", "LARK_TABLE_ID_VR_CONTROL", "LARK_TABLE_ID_VR_DATA"]
+        missing = [k for k in required if not hasattr(settings, k)]
+        if missing:
+            return Response({"error": f"Missing settings: {', '.join(missing)}"}, status=400)
+
+        record_id = request.data.get("control_record_id")
+        if not record_id:
+            return Response({"error": "control_record_id is required"}, status=400)
+
+        base_id = settings.LARK_BITABLE_BASE_ID
+        lc = LarkClient()
+
+        rec = lc.get_record(base_id, settings.LARK_TABLE_ID_VR_CONTROL, record_id)
+        fields = rec.get("fields", {})
+        date_start = fields.get(F_DATE_START)
+        date_end = fields.get(F_DATE_END)
+        platform = fields.get(F_PLATFORM)
+        email_to = fields.get(F_EMAIL)
+        gen_checked = bool(fields.get(F_GEN, False))
+        send_checked = bool(fields.get(F_SEND, False))
+
+        if not (gen_checked or send_checked):
+            return Response({"status": "noop", "detail": "No checkbox checked."}, status=200)
+
+        items = lc.list_records(base_id, settings.LARK_TABLE_ID_VR_DATA)
         rows = []
-        for r in all_records:
-            fields = r["fields"]
+        for it in items:
             flat = {}
-            for k, v in fields.items():
+            for k, v in it.get("fields", {}).items():
                 if isinstance(v, list):
                     flat[k] = ", ".join(
-                        i.get("text") if isinstance(i, dict) else str(i)
-                        for i in v
+                        (i.get("text") if isinstance(i, dict) and "text" in i
+                         else i.get("name") if isinstance(i, dict) and "name" in i
+                         else str(i)) for i in v
                     )
                 else:
                     flat[k] = v
             rows.append(flat)
 
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows) if rows else pd.DataFrame()
+        if df.empty or "Date" not in df.columns:
+            return Response({"error": "VR data empty or 'Date' column missing"}, status=400)
 
-    def _parse_date_field(self, value):
-        if isinstance(value, (int, float)):
-            return pd.to_datetime(value, unit="ms")
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, str):
-            try:
-                return pd.to_datetime(value)
-            except Exception:
-                return None
-        return None
-
-    def post(self, request):
-        vr_name = request.data.get("vr_name")
-        start_date = request.data.get("start_date")
-        end_date = request.data.get("end_date")
-
-        if not vr_name or not start_date or not end_date:
-            return Response({"error": "vr_name, start_date, end_date are required"}, status=400)
-
-        df = self._fetch_vr_data()
-
-        if "Date" not in df.columns:
-            return Response({"error": "The table must have a 'Date' column."}, status=400)
-        if "VR name" not in df.columns:
-            return Response({"error": "The table must have a 'VR name' column."}, status=400)
-
-        # Parse dates
-        df["Date"] = df["Date"].apply(self._parse_date_field)
+        df["Date"] = df["Date"].apply(self._parse_date)
         df = df.dropna(subset=["Date"])
+        tz = pytz.timezone("Asia/Dhaka")
 
-        # Debug print
-        print("Unique VR names in data:", df["VR name"].unique())
-        print("Min date:", df["Date"].min())
-        print("Max date:", df["Date"].max())
-        print("First rows:")
-        print(df[["VR name", "Date"]].head())
+        df["Date"] = df["Date"].apply(lambda d: d if d.tzinfo else pytz.UTC.localize(d))
+        df["Date"] = df["Date"].apply(lambda d: d.astimezone(tz))
 
-        start_date_obj = pd.to_datetime(start_date)
-        end_date_obj = pd.to_datetime(end_date)
 
-        vr_mask = df["VR name"].astype(str).str.strip().str.lower() == vr_name.strip().lower()
-        date_mask = (df["Date"] >= start_date_obj) & (df["Date"] <= end_date_obj)
+        start_dt = self._parse_date(date_start)
+        end_dt = self._parse_date(date_end)
 
-        filtered = df[vr_mask & date_mask]
+        if start_dt:
+            if not start_dt.tzinfo:
+                start_dt = pytz.UTC.localize(start_dt)
+            start_dt = tz.localize(datetime.combine(start_dt.astimezone(tz).date(), datetime.min.time()))
 
+        if end_dt:
+            if not end_dt.tzinfo:
+                end_dt = pytz.UTC.localize(end_dt)
+            end_dt = tz.localize(datetime.combine(end_dt.astimezone(tz).date(), datetime.max.time()))
+
+
+
+
+        if not start_dt or not end_dt:
+            return Response({"error": "Invalid date start/end in control row"}, status=400)
+
+        mask = (df["Date"] >= start_dt) & (df["Date"] <= end_dt)
+        if platform and "Platform" in df.columns:
+            mask &= df["Platform"].astype(str).str.strip().str.lower() == str(platform).strip().lower()
+        if email_to:
+            email_col = "(VR)restaurant email" if "(VR)restaurant email" in df.columns else \
+                        "Restaurant email" if "Restaurant email" in df.columns else None
+            if email_col:
+                mask &= df[email_col].astype(str).str.strip().str.lower() == str(email_to).strip().lower()
+
+        filtered = df[mask].copy()
         if filtered.empty:
-            return Response({"error": "No data found for given criteria."}, status=404)
+            return Response({"error": "No rows match filters"}, status=404)
 
-        # Excel
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Invoice"
+        excel_url = pdf_url = None
+        attached = False
+        emailed = False
+        email_error = None
 
-        # Header
-        ws.merge_cells("A1:L1")
-        ws["A1"] = "INVOICE"
-        ws["A1"].font = Font(bold=True, size=14)
-        ws["L2"] = datetime.now().strftime("%B %d, %Y")
+        if gen_checked:
+            excel_bytes = build_vr_excel(filtered)
+            pdf_bytes = build_vr_pdf(filtered, {
+                "platform": platform,
+                "restaurant_email": email_to,
+                "start_date": start_dt.strftime("%Y-%m-%d"),
+                "end_date": end_dt.strftime("%Y-%m-%d"),
+            })
+            ts = datetime.now().strftime("%Y%m%d%H%M%S")
+            x_path, p_path = f"vr_invoices/vr_invoice_{ts}.xlsx", f"vr_invoices/vr_invoice_{ts}.pdf"
+            default_storage.save(x_path, ContentFile(excel_bytes))
+            default_storage.save(p_path, ContentFile(pdf_bytes))
+            excel_url = default_storage.url(x_path)
+            pdf_url = default_storage.url(p_path)
 
-        ws["A4"] = "Pay to:"
-        ws["A5"] = "Nice Meeting You"
-        ws["A6"] = "535 Clarke Rd, Coquitlam, BC V3J 3X4"
+            lc.update_record(base_id, settings.LARK_TABLE_ID_VR_CONTROL, record_id, {
+                F_ATTACH_XLSX: excel_url,
+                F_ATTACH_PDF: pdf_url,
+                F_GEN: False,
+                F_EMAIL_STATUS: "request",
+            })
+            attached = True
 
-        ws["H4"] = "From:"
-        ws["H5"] = "Thunder Digital Kitchen"
-        ws["H6"] = "200 - 13571 COMMERCE PKY, Richmond BC, Canada"
+        if send_checked:
+            if not email_to:
+                return Response({"error": "Restaurant email missing in control row"}, status=400)
+            try:
+                pdf_bytes = build_vr_pdf(filtered, {
+                    "platform": platform,
+                    "restaurant_email": email_to,
+                    "start_date": start_dt.strftime("%Y-%m-%d"),
+                    "end_date": end_dt.strftime("%Y-%m-%d"),
+                })
+            except Exception as e:
+                return Response({"error": f"Failed to build PDF: {e}"}, status=500)
 
-        ws.append([])
-        ws.append([])
+            attachment = {
+                "filename": "invoice.pdf",
+                "content": pdf_bytes,
+                "mimetype": "application/pdf",
+            }
 
-        # Charges heading
-        ws.merge_cells(start_row=9, start_column=1, end_row=9, end_column=len(filtered.columns))
-        ws["A9"] = "Charges"
-        ws["A9"].font = Font(bold=True)
+            # FIX THIS: Use the input datetime parsed from Lark, not the converted one
+            original_start = self._parse_date(date_start).astimezone(tz)
+            original_end = self._parse_date(date_end).astimezone(tz)
+            subject = f"Invoice {original_start.date()} – {original_end.date()}"
 
-        headers = list(filtered.columns)
-        ws.append(headers)
-        for col in range(1, len(headers) + 1):
-            ws.cell(row=ws.max_row, column=col).font = Font(bold=True)
+            # Use these for email context
+            context = {
+                "platform": str(platform),
+               "start_date": start_dt.strftime("%Y-%m-%d"),
+                "end_date": end_dt.strftime("%Y-%m-%d"),
 
-        grand_total = 0
-        data_start_row = ws.max_row + 1
+            }
 
-        # Rows
-        for _, row in filtered.iterrows():
-            row_values = []
-            for col in headers:
-                val = row.get(col)
-                if col == "Date":
-                    val = pd.to_datetime(val).strftime("%Y-%m-%d") if pd.notnull(val) else ""
-                row_values.append(val)
-                if col == "Total":
-                    try:
-                        grand_total += float(val or 0)
-                    except Exception:
-                        pass
-            ws.append(row_values)
 
-        # Autosize columns
-        for col_cells in ws.columns:
-            for cell in col_cells:
-                if not isinstance(cell, MergedCell):
-                    col_letter = cell.column_letter
-                    break
-            else:
-                continue
-            max_length = 0
-            for cell in col_cells:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = max_length + 2
-
-        # Empty rows
-        ws.append([])
-        ws.append([])
-
-        # Grand Total
-        if "Total" in headers:
-            ws.append([""] * (len(headers) - 2) + ["Amount to be Paid", f"{grand_total:.2f}"])
-            ws.cell(row=ws.max_row, column=len(headers) - 1).font = Font(bold=True)
-            ws.cell(row=ws.max_row, column=len(headers)).font = Font(bold=True)
-
-        # Save
-        buffer = BytesIO()
-        wb.save(buffer)
-        buffer.seek(0)
-
-        filename = f"vr_invoices/invoice_{vr_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
-        default_storage.save(filename, ContentFile(buffer.read()))
-        file_url = default_storage.url(filename)
+            try:
+                status_code = send_email(
+                    subject=subject,
+                    html_path="email/vr_invoice.html",
+                    context=context,
+                    to_emails=[email_to],
+                    from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL,
+                    attachment=attachment,
+                )
+                emailed = (status_code == 202) or bool(status_code)
+                lc.update_record(base_id, settings.LARK_TABLE_ID_VR_CONTROL, record_id, {
+                    F_SEND: False,
+                    F_EMAIL_STATUS: "sent" if emailed else "failed",
+                })
+            except Exception as e:
+                emailed = False
+                email_error = str(e)
+                lc.update_record(base_id, settings.LARK_TABLE_ID_VR_CONTROL, record_id, {
+                    F_EMAIL_STATUS: "failed"
+                })
 
         return Response({
-            "status": "Invoice generated",
-            "file_url": file_url,
-            "file_path": filename,
-            "record_count": len(filtered),
-            "grand_total": grand_total if "Total" in headers else "N/A"
-        })
-
-        
-class BaseSendVRInvoiceAPIView(APIView):
-    """
-    Send already-generated invoice file to email.
-    """
-    def post(self, request):
-        file_path = request.data.get("file_path")
-        email_to = request.data.get("email")
-
-        if not file_path or not email_to:
-            return Response({"error": "file_path and email are required."}, status=400)
-
-        file_bytes = default_storage.open(file_path).read()
-
-        attachment = {
-            "content": file_bytes,
-            "filename": "invoice.xlsx",
-            "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        }
-
-        status_code = send_email(
-            subject="VR Invoice",
-            html_path="email/vr_invoice.html",
-            context={},
-            to_emails=[email_to],
-            from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL,
-            attachment=attachment
-        )
-
-        if not status_code or status_code >= 400:
-            return Response({"error": "Failed to send email"}, status=500)
-
-        return Response({"status": "Email sent successfully"})
-
-
+            "status": "ok",
+            "attached": attached,
+            "emailed": emailed,
+            "email_error": email_error,
+            "excel_url": excel_url,
+            "pdf_url": pdf_url,
+            "rows": len(filtered),
+        }, status=200)
 
 
 class BaseExportCustomerOrders(APIView):

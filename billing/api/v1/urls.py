@@ -39,7 +39,10 @@ from billing.api.v1.views import (BillingProfileRetrieveUpdateDestroyAPIView,
                                   WalletPaymentAPIView, UnregisteredGiftCardView, ConfirmGiftCardStripePaymentApiView,
                                  SendOrderReceiptAPIView, CashOrderApiView, RefundViewSet, RemotekitchenOrderAPIView, 
                                  RestaurantFeeApiView, OrderUserCancelAPIView, ExportUserOrderExcelAPIView,
-                                 SendVRInvoiceAPIView,GenerateVRInvoiceAPIView,ExportCustomerOrders,CartValidationAPIView,UberStuckOrdersAPIView,OrderDetailsWithHistoryAPIView,PendingOrdersAPIView)
+
+                               ExportCustomerOrders,CartValidationAPIView,UberStuckOrdersAPIView,VRInvoiceWebhookView,
+                             OrderDetailsWithHistoryAPIView,PendingOrdersAPIView)
+
 
 router = DefaultRouter()
 router.register("payment-save", PaymentMethodSavedView,
@@ -175,10 +178,11 @@ urlpatterns = [
     path('order/<int:pk>/refund/success/', refund_viewset, name="refund-success"),
     # path('/transactions/<pk>/update-is-seen/', TransactionsModelAPIView.as_view()),
     path('restaurant/fee/', RestaurantFeeApiView.as_view(), name='restaurant-fee'),
-    path('generateVr-invoice/', GenerateVRInvoiceAPIView.as_view(), name='Generate-Invoice'),
-    path('send-invoice/', SendVRInvoiceAPIView.as_view(), name='Send-Invoice'),
+   
+    path("customer-orders/", ExportCustomerOrders.as_view(), name="export-customer-orders"),
+    path("vr-invoice/", VRInvoiceWebhookView.as_view(), name="vr-invoice"),
 
-       path("customer-orders/", ExportCustomerOrders.as_view(), name="export-customer-orders"),
+
 
     # path("lark/webhook/", LarkWebhookAPIView.as_view()),
 
