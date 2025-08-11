@@ -66,6 +66,8 @@ class PromotionalCampaignAdmin(admin.ModelAdmin):
         }),
     )
 
+    
+
 @admin.register(TokenFCM)
 class TokenFCMAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'user_email', 'token', 'device_type')  # Remove 'updated_at' here
