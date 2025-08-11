@@ -434,3 +434,5 @@ path/to/*.json
 .env
 credentials/*.json
 .env
+credentials/*.json
+.env
