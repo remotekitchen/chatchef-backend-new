@@ -39,7 +39,10 @@ from billing.api.v1.views import (BillingProfileRetrieveUpdateDestroyAPIView,
                                   WalletPaymentAPIView, UnregisteredGiftCardView, ConfirmGiftCardStripePaymentApiView,
                                  SendOrderReceiptAPIView, CashOrderApiView, RefundViewSet, RemotekitchenOrderAPIView, 
                                  RestaurantFeeApiView, OrderUserCancelAPIView, ExportUserOrderExcelAPIView,
-                               ExportCustomerOrders,CartValidationAPIView,UberStuckOrdersAPIView,VRInvoiceWebhookView)
+
+                               ExportCustomerOrders,CartValidationAPIView,UberStuckOrdersAPIView,VRInvoiceWebhookView,
+                             OrderDetailsWithHistoryAPIView,PendingOrdersAPIView)
+
 
 router = DefaultRouter()
 router.register("payment-save", PaymentMethodSavedView,
@@ -156,6 +159,8 @@ urlpatterns = [
     path('generate-invoice/', GenerateInvoiceAPIView.as_view()),
     path('generate-invoice-for-hungry/', GenerateInvoiceForHungry.as_view()),
     path('get-update-delivery-expense/', OrderDeliveryExpenseAPI.as_view()),
+    path('get-orders/', OrderDetailsWithHistoryAPIView.as_view()),
+    path('get-orders-merchant/', PendingOrdersAPIView.as_view()),
     path('get-invoices-for-hungry/<str:pk>/', GETInvoicesForHungry.as_view()),
     path('customer-dont-ordered/<str:pk>/', CustomersWhoDontOrder.as_view()),
     path('get-invoices/<str:pk>/', GETInvoices.as_view()),
