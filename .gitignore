@@ -432,3 +432,5 @@ pip-selfcheck.json
 static/logs/debug.log*
 path/to/*.json
 .env
+credentials/*.json
+.env
