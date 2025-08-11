@@ -41,7 +41,7 @@ from django.db.models.signals import post_migrate
 from accounts.models import UserEvent, DAURecord
 logger = get_logger()
 
-
+log = logging.getLogger(__name__)
 @app.task(name="chatchef.payout_to_user")
 def payout_to_user():
     billing_profiles = BillingProfile.objects.all()
@@ -966,63 +966,23 @@ def setup_ubereats_stuck_order_check(sender, **kwargs):
 
 
 from lark_automation.sync_consumer import sync_customers
-@shared_task
+from lark_automation.sync_ht_payout import push_all_hungry_orders_direct
+
+@shared_task(name="billing.sync_customers_to_lark")
 def sync_customers_to_lark():
-    sync_customers()  # ✅ Fix: must call the function
-
-
-@receiver(post_migrate)
-def create_sync_task_after_migrate(sender, **kwargs):
-    if sender.name != "billing":
-        return
-    setup_periodic_task()
-
-
-def setup_periodic_task():
-    task_name = 'Sync Customers to Lark'
-
-    # Crontab: run every day at 12 AM Bangladesh time (18:00 UTC)
-    schedule, _ = CrontabSchedule.objects.get_or_create(
-        minute='0',
-        hour='18',
-        day_of_week='*',
-        day_of_month='*',
-        month_of_year='*',
-    )
-
-    task, created = PeriodicTask.objects.update_or_create(
-        name=task_name,
-        defaults={
-            'task': 'billing.tasks.sync_customers_to_lark',  # must match full dotted path
-            'crontab': schedule,
-            'args': json.dumps([]),
-            'kwargs': json.dumps({}),
-            'enabled': True,
-            'description': 'Automatically syncs Django users to Lark Base every night',
-        }
-    )
-
-    if created:
-        print(f"✅ Created periodic task: {task_name}")
-    else:
-        print(f"🔁 Periodic task '{task_name}' already exists and was updated.")
+    log.warning("👟 Running nightly customer sync to Lark…")
+    sync_customers()
+    log.warning("✅ Customer sync done.")
 
 
 
-# tasks.py
-
-from lark_automation.sync_ht_payout import push_all_hungry_invoices_to_lark
-from lark_automation.sync_DO_calculation import push_DO_invoices_to_lark
 
 
-@shared_task
+
+@shared_task(name="billing.sync_all_hungry_invoices_to_lark")
 def sync_all_hungry_invoices_to_lark():
-    print("🚀 Starting full Hungry invoice sync to Lark...")
-    push_all_hungry_invoices_to_lark()
-    print("✅ Sync finished.")
+    log.warning("🚀 Starting full Hungry invoice sync to Lark…")
+    push_all_hungry_orders_direct()
+    log.warning("✅ Hungry sync finished.")
 
-
-@app.task
-def sync_all_do_invoices_to_lark():
-    push_DO_invoices_to_lark()
 
