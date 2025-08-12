@@ -436,3 +436,9 @@ credentials/*.json
 .env
 credentials/*.json
 .env
+
+
+# Firebase keys
+.credentials/firebase_service_account.json
+hungrytiger/settings/serviceAccountKey.json
+
