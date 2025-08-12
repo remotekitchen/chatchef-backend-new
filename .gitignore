@@ -439,6 +439,6 @@ credentials/*.json
 
 
 # Firebase keys
-.credentials/firebase_service_account.json
-hungrytiger/settings/serviceAccountKey.json
+# .credentials/firebase_service_account.json
+# hungrytiger/settings/serviceAccountKey.json
 
