@@ -99,6 +99,7 @@ def send_push_notification(tokens, data):
     restaurant_name = data.pop("restaurant_name", "")     # Default if missing
     screen = data.pop("screen", "")     # Default if missing
     id = data.pop("id", "")     # Default if missing
+    order_id = data.pop("order_id", "")
 
 
 
@@ -153,6 +154,8 @@ def send_push_notification(tokens, data):
                 "restaurant_name": str(restaurant_name),
                 "screen": str(screen),
                 "id": str(id),
+                "order_id": str(order_id),
+                "sound": 'order_sound'
 
             },
             token=token

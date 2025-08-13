@@ -480,6 +480,7 @@ def notify_quick_login_users_on_order(sender, instance, created, **kwargs):
             "restaurant_name": getattr(instance, "restaurant", None).name if hasattr(instance, "restaurant") else "Hungry Tiger",
             "screen": "OrderDetails",
             "id": str(instance.id),
+            "order_id": str(instance.id)
         }
     )
 
