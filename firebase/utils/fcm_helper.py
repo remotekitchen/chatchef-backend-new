@@ -358,7 +358,124 @@ def send_push_notification_for_order_management(tokens, data):
 
     return results
 
-    
+
+
+FCM_LEGACY_URL = "https://fcm.googleapis.com/fcm/send"
+FCM_SERVER_KEY = "AAAAQ6Zj1xs:APA91bG3DrnPClBlnkcAYp3zVI-Anj7thbcnNHkQi8LNzzZjxHjkvWUqcaVFzuvnamJmwu24OSqpwDifr2zQy4LWEN9xzCOD6HBBlqTckLBOXmTHT9ZQdsAzxsUQM4nadt9MNuG4ZHgk"  
+
+
+def _pretty_json_for_log(token: str, title: str, body: str, image: str | None, data: dict):
+    """Exact legacy-shaped JSON for your logs only (NOT what FCM v1 accepts)."""
+    return {
+        "to": token,
+        "notification": {"title": title, "body": body, "sound": "order_sound"},
+        "android": {"notification": {
+            "channel_id": "high_importance_channel",
+            "sound": "order_sound",
+            "priority": "high",
+            "visibility": "public",
+        }},
+        "apns": {
+            "payload": {"aps": {
+                "sound": "order_sound.wav",
+                "badge": 1,
+                "alert": {"title": title, "body": body},
+                "mutable-content": 1
+            }},
+            "headers": {"apns-priority": "10"}
+        },
+        "data": data,
+        "priority": "high"
+    }
+
+def send_order_push_admin(tokens: list[str], payload: dict):
+    title = payload.get("campaign_title") or payload.get("title") or ""
+    body  = payload.get("campaign_message") or payload.get("body") or ""
+    image = (payload.get("campaign_image") or "").strip() or None
+
+    # Build the data block once so logs and the real send use the same values
+    data_block = {
+        "order_id": str(payload.get("order_id", "")),
+        "image_url": image or "",
+        "badge_count": "1",
+        "id": str(payload.get("id", "")),
+        "screen": str(payload.get("screen", "")),
+        "click_action": "https://www.hungry-tiger.com/",
+        "campaign_category": str(payload.get("campaign_category", "")),
+        "campaign_is_active": str(payload.get("campaign_is_active", "")),
+        "restaurant_name": str(payload.get("restaurant_name", "")),
+        "icon": "https://www.example.com/icon.png",
+        "image": "https://www.example.com/image.jpg",
+        "badge": "https://www.example.com/badge.png",
+        # mirror title/body/sound so the app can always reconstruct
+        "title": title, "body": body, "sound": "order_sound",
+    }
+
+    results = {"successful": 0, "failed": 0, "failures": [], "invalid_tokens": []}
+    tokens = list(dict.fromkeys(tokens or []))
+    if not tokens:
+        return results
+
+    for token in tokens:
+        # 1) Log the exact “legacy” shape you want (for visibility)
+        pretty = _pretty_json_for_log(token, title, body, image, data_block)
+        print("LOG (pretty JSON):", pretty)
+
+        # 2) Actually send using HTTP v1 via Admin SDK
+        msg = messaging.Message(
+            token=token,  # <-- NOT 'to'
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+                image=image or None,   # Optional
+            ),
+            android=messaging.AndroidConfig(
+                priority="high",       # Android priority lives here
+                notification=messaging.AndroidNotification(
+                    channel_id="high_importance_channel",
+                    sound="order_sound",     # Android sound
+                    visibility="public",
+                    image=image or None,
+                ),
+            ),
+            apns=messaging.APNSConfig(
+                headers={"apns-priority": "10"},  # iOS priority
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(
+                        sound="order_sound.wav",   # iOS sound
+                        badge=1,
+                        mutable_content=True,
+                        alert=messaging.ApsAlert(title=title, body=body),
+                    )
+                ),
+                fcm_options=messaging.APNSFCMOptions(image=image) if image else None,
+            ),
+            data=data_block,
+        )
+
+        try:
+            resp = messaging.send(msg)
+            print("FCM sent:", resp)
+            results["successful"] += 1
+        except Exception as e:
+            err = str(e)
+            print("FCM error:", err)
+            results["failed"] += 1
+            results["failures"].append({"token": token, "error": err})
+            if any(s in err.lower() for s in ["unregistered", "not registered", "invalid", "expired", "mismatch"]):
+                results["invalid_tokens"].append(token)
+
+    # Optional: clean invalid tokens in DB
+    if results["invalid_tokens"]:
+        try:
+            remove_invalid_tokens_from_database(results["invalid_tokens"])
+        except Exception:
+            pass
+
+    return results
+
+
+
 
 def remove_invalid_tokens_from_database(invalid_tokens):
     """
