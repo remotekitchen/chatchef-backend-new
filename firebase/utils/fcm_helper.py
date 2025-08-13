@@ -248,6 +248,117 @@ def send_push_notification(tokens, data):
 
 #     return results
 
+INVALID_TOKEN_MARKERS = [
+    "invalid registration",
+    "not registered",
+    "invalid token",
+    "unregistered",
+    "expired",
+]
+
+def send_push_notification_for_order_management(tokens, data):
+    title = data.get("campaign_title", "") or data.get("title", "")
+    body = data.get("campaign_message", "") or data.get("body", "")
+    campaign_image = (data.get("campaign_image") or "").strip() or None
+    campaign_category = str(data.get("campaign_category", ""))
+    campaign_is_active = str(data.get("campaign_is_active", ""))
+    restaurant_name = str(data.get("restaurant_name", ""))
+    screen = str(data.get("screen", ""))
+    _id = str(data.get("id", ""))
+    order_id = str(data.get("order_id", ""))
+
+    results = {"successful": 0, "failed": 0, "failures": [], "invalid_tokens": []}
+
+    # (Optional) de-dup tokens
+    tokens = list(dict.fromkeys(tokens or []))
+    if not tokens:
+        return results
+
+    for token in tokens:
+        msg = messaging.Message(
+            token=token,
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+                image=campaign_image,  # shown on supported platforms
+            ),
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    channel_id="high_importance_channel",  # must exist in the app
+                    sound="order_sound",                    # raw/order_sound.(mp3|wav)
+                    priority="high",
+                    visibility="public",
+                    image=campaign_image,
+                ),
+            ),
+            apns=messaging.APNSConfig(
+                headers={"apns-priority": "10"},
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(
+                        sound="order_sound.wav",  # ensure this filename exists in your app bundle or use dict for critical sounds
+                        badge=1,
+                        mutable_content=True,    # required so iOS can download/show image
+                        alert=messaging.ApsAlert(title=title, body=body),
+                    )
+                ),
+                fcm_options=messaging.APNSFCMOptions(
+                    image=campaign_image  # iOS image
+                ),
+            ),
+            data={
+                # keep all your custom data
+                "order_id": order_id,
+                "image_url": str(campaign_image or ""),
+                "badge_count": "1",
+                "id": _id,
+                "screen": screen,
+                "click_action": "https://www.hungry-tiger.com/",
+                "campaign_category": campaign_category,
+                "campaign_is_active": campaign_is_active,
+                "restaurant_name": restaurant_name,
+                "icon": "https://www.example.com/icon.png",
+                "image": "https://www.example.com/image.jpg",
+                "badge": "https://www.example.com/badge.png",
+
+                # also mirror title/body/sound so you can build a unified object client-side
+                "title": title,
+                "body": body,
+                "sound": "order_sound",
+            },
+        )
+
+        # DEBUG: print the exact JSON payload FCM will receive
+        try:
+            # Private API but useful for debugging in dev
+            print("FCM request JSON:", messaging._message_to_json(msg))
+        except Exception:
+            pass
+
+        try:
+            resp = messaging.send(msg)
+            print(f"Notification sent to {token[:10]}...: {resp}")
+            results["successful"] += 1
+        except Exception as e:
+            err = str(e)
+            print(f"Error sending to {token[:10]}...: {err}")
+            results["failed"] += 1
+            results["failures"].append({"token": token, "error": err})
+            low = err.lower()
+            if any(marker in low for marker in INVALID_TOKEN_MARKERS):
+                results["invalid_tokens"].append(token)
+
+    # If you maintain a Token table, remove invalid ones here
+    if results["invalid_tokens"]:
+        try:
+            remove_invalid_tokens_from_database(results["invalid_tokens"])
+            print(f"Removed {len(results['invalid_tokens'])} invalid tokens.")
+        except Exception as e:
+            print("Failed to remove invalid tokens:", e)
+
+    return results
+
+    
 
 def remove_invalid_tokens_from_database(invalid_tokens):
     """

@@ -19,7 +19,7 @@ from core.utils import get_logger
 
 from .utiils import check_for_order_status_and_call
 from billing.clients.raider_app import Raider_Client
-from firebase.utils.fcm_helper import  get_dynamic_message, send_push_notification
+from firebase.utils.fcm_helper import  get_dynamic_message, send_push_notification,send_push_notification_for_order_management
 from firebase.models import TokenFCM
 from food.models import Restaurant
 from django.core.exceptions import ObjectDoesNotExist
@@ -469,7 +469,7 @@ def notify_quick_login_users_on_order(sender, instance, created, **kwargs):
     if not tokens:
         return
     print("tokens------90", tokens)
-    send_push_notification(
+    send_push_notification_for_order_management(
         tokens=tokens,
         data={
             "campaign_title": "New Order Placed",
