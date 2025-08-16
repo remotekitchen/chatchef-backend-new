@@ -39,6 +39,7 @@ import pytz
 from django.utils import timezone
 from rest_framework.permissions import  IsAuthenticated
 from accounts.permissions import IsNotBlocked
+from decimal import Decimal, ROUND_HALF_UP
 
 logger = get_logger()
 
@@ -249,12 +250,14 @@ class CostCalculationAPIView(BaseCostCalculationAPIView):
             print("📏 Haversine distance:", distance)
 
             try:
-                distance = float(distance)
-                if distance <= 3:
-                    fee = 0
-                else:
-                    fee = 25 + (distance - 3) * 12
-                return round(fee, 2), round(distance, 2)
+                distance_km = float(distance)
+
+                # First 3 km free; after that, ৳10 per km (proportional), rounded to nearest taka (half-up)
+                extra_km = max(0.0, distance_km - 3.0)
+                fee = int((Decimal(str(extra_km)) * Decimal("10")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+                print(f"Delivery fee (based on {distance_km:.2f} km) = {fee} Tk")
+                return round(fee, 2), round(distance_km, 2)
             except (TypeError, ValueError):
                 raise ParseError("⚠️ Invalid delivery distance received for raider_app.")
 
@@ -668,13 +671,19 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
           # total = int(self.calculate_amount(data.get('orderitem_set')).get('base_price__sum') * 100)
         if distance is not None:
             try:
-                distance = float(distance)
-                if distance <= 3:
-                    fee = 0
-                else:
-                    fee = 25 + (distance - 3) * 12
-                print(f"✅ Delivery fee (based on {distance:.2f} km) = {fee} Tk")
-                return round(fee, 2),Order.DeliveryPlatform.RAIDER_APP.value
+                distance_km_dec = Decimal(str(distance))
+                extra_km = distance_km_dec - Decimal("3")
+                if extra_km < 0:
+                    extra_km = Decimal("0")
+
+                fee_dec = (extra_km * Decimal("10")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)  # nearest taka
+                fee = int(fee_dec)  # int Tk
+                distance_km_float = float(distance_km_dec)  # only for printing
+
+                # avoid emojis (Windows console encoding)
+                print(f"Delivery fee (based on {distance_km_float:.2f} km) = {fee} Tk")
+
+                return fee, Order.DeliveryPlatform.RAIDER_APP.value
             except ValueError:
                 print("⚠️ Invalid distance format.")
 

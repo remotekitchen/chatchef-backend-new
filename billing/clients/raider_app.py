@@ -250,7 +250,9 @@ class Raider_Client:
             },
             "drop_off_phone": data.get("dropoff_phone_number"),
             "pickup_latitude": restaurant.latitude,
-            "pickup_longitude": restaurant.longitude
+            "pickup_longitude": restaurant.longitude,
+            "drop_off_latitude": data.get("lat"),
+            "drop_off_longitude": data.get("lng")
         }
 
         print(map_data, 'Delivery check payload ------------------------>')
