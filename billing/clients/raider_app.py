@@ -257,8 +257,8 @@ class Raider_Client:
 
         print(map_data, 'Delivery check payload ------------------------>')
 
-        # url = "https://raider.api.chatchefs.com/delivery/api/v1/check-address/"
-        url = "http://127.0.0.1:9000/delivery/api/v1/check-address/"
+        url = "https://raider.api.chatchefs.com/delivery/api/v1/check-address/"
+        # url = "http://127.0.0.1:9000/delivery/api/v1/check-address/"
         try:
             res = requests.post(
                 url,
