@@ -968,26 +968,3 @@ def setup_ubereats_stuck_order_check(sender, **kwargs):
 
 
 
-
-
-from lark_automation.sync_consumer import sync_customers
-from lark_automation.sync_ht_payout import push_all_hungry_orders_direct
-
-@shared_task(name="billing.sync_customers_to_lark")
-def sync_customers_to_lark():
-    log.warning("👟 Running nightly customer sync to Lark…")
-    sync_customers()
-    log.warning("✅ Customer sync done.")
-
-
-
-
-
-
-@shared_task(name="billing.sync_all_hungry_invoices_to_lark")
-def sync_all_hungry_invoices_to_lark():
-    log.warning("🚀 Starting full Hungry invoice sync to Lark…")
-    push_all_hungry_orders_direct()
-    log.warning("✅ Hungry sync finished.")
-
-

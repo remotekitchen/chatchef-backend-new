@@ -29,7 +29,17 @@ import pytz
 from datetime import datetime
 
 logger = get_logger()
+from billing.models import CANCELLED_BY_CHOICES
 
+class OrderItemCancelEntrySerializer(serializers.Serializer):
+    order_item_id = serializers.IntegerField()
+    qty = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
+
+class PartialCancelRequestSerializer(serializers.Serializer):
+    items = OrderItemCancelEntrySerializer(many=True)
+    cancelled_by = serializers.ChoiceField(choices=[c[0] for c in CANCELLED_BY_CHOICES], default="restaurant")
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
 
 class BaseOrderModifiersItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -51,25 +61,54 @@ class BaseOrderItemSerializer(WritableNestedModelSerializer):
     item_name = serializers.SerializerMethodField()
     item_price = serializers.SerializerMethodField(read_only=True)
     modifiers = BaseOrderedModifierSerializer(many=True, allow_empty=True)
+    active_quantity = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
         fields = "__all__"
         extra_kwargs = {
             "order": {"required": False},
-            "modifiers": {"required": False}
+            "modifiers": {"required": False},
         }
 
-    def get_item_name(self, obj: OrderItem):
-        if type(obj).__name__ != "OrderItem":
-            return ""
-        return obj.menu_item.name if obj.menu_item is not None else ""
+    def get_item_name(self, obj):
+        # Works for both OrderItem instances and dicts
+        if isinstance(obj, OrderItem):
+            return obj.menu_item.name if obj.menu_item else ""
+        if isinstance(obj, dict):
+            mi = obj.get("menu_item")
+            if isinstance(mi, dict):
+                return mi.get("name", "")
+        return ""
 
-    def get_item_price(self, obj: OrderItem):
-        if type(obj).__name__ != "OrderItem":
-            return ""
-        print("obj.menu_item.base_price", obj.menu_item.base_price)
-        return obj.menu_item.base_price if obj.menu_item is not None else None
+    def get_item_price(self, obj):
+        # Works for both OrderItem instances and dicts
+        if isinstance(obj, OrderItem):
+            return obj.menu_item.base_price if obj.menu_item else None
+        if isinstance(obj, dict):
+            mi = obj.get("menu_item")
+            if isinstance(mi, dict):
+                return mi.get("base_price")
+        return None
+
+    def get_active_quantity(self, obj):
+        # If it’s a real model instance, use the property you added
+        if isinstance(obj, OrderItem):
+            return obj.active_quantity
+
+        # During request->representation, DRF may pass an OrderedDict
+        if isinstance(obj, dict):
+            try:
+                qty = int(obj.get("quantity") or 0)
+                canceled = int(obj.get("canceled_quantity") or 0)
+                is_canceled = bool(obj.get("is_canceled") or False)
+                active = max(qty - canceled, 0)
+                return 0 if is_canceled else active
+            except Exception:
+                return 0
+
+        return 0
+
 
 
 class BaseOrderItemDetailSerializer(BaseOrderItemSerializer):
