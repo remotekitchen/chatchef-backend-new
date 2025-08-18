@@ -22,14 +22,22 @@ from rest_framework import serializers
 import random
 # from billing.utilities.oms_notification import send_order_cancelled_notification_helper
 from django.db.models import JSONField  # Django 3.1+ for generic DBs
+import json
+from django.utils import timezone
+import json, logging
 
 from firebase.models import CompanyPushToken
+
+
 from firebase.utils.fcm_helper import FCMHelper
 from firebase.models import Platform as FirebasePlatform
+from django.db import transaction
+from django.db.models import Q, F
 
 
 import string
-
+from firebase.utils.fcm_helper import  get_dynamic_message, send_push_notification
+logger = logging.getLogger(__name__)
 
 
 class BillingProfile(BaseModel):
@@ -644,7 +652,207 @@ class Order(BaseModel):
 
         super().save(*args, **kwargs)
 
-            
+        # ---------- SAFE HELPERS (add-only) ----------
+    @property
+    def has_canceled_items(self) -> bool:
+        """
+        True if any line is fully canceled or partially canceled.
+        Non-breaking: only reads OrderItem flags.
+        """
+        return self.orderitem_set.filter(Q(is_canceled=True) | Q(canceled_quantity__gt=0)).exists()
+
+    @property
+    def active_items(self):
+        """
+        Items that still have deliverable quantity.
+        Non-breaking: read-only queryset.
+        """
+        return self.orderitem_set.exclude(is_canceled=True).exclude(canceled_quantity__gte=F("quantity"))
+
+    @property
+    def net_total(self) -> float:
+        """
+        What the user should pay after cancellations.
+        Non-breaking: does not mutate original 'total'.
+        """
+        try:
+            return max(float(self.total or 0) - float(self.refund_amount or 0), 0.0)
+        except Exception:
+            return float(self.total or 0)
+
+    # ---------- REFUND MATH (add-only) ----------
+    def _allocate_refund_for(self, item, qty: int) -> float:
+        """
+        Simple, predictable proration:
+        - base: unit_price * qty
+        - optional tax share proportional to subtotal (keeps discounts/tips untouched)
+        Non-breaking: only used when you call apply_item_cancellations().
+        """
+        qty = int(qty or 0)
+        if qty <= 0:
+            return 0.0
+
+        unit = float(getattr(item, "unit_price", 0) or 0)
+        line_sub = unit * qty
+
+        tax_share = 0.0
+        try:
+            sub = float(self.subtotal or 0)
+            tax = float(self.tax or 0)
+            if sub > 0:
+                tax_share = (line_sub / sub) * tax
+        except Exception:
+            tax_share = 0.0
+
+        return round(line_sub + tax_share, 2)
+
+    # ---------- MAIN ENTRYPOINT (add-only) ----------
+    @transaction.atomic
+    def apply_item_cancellations(self, item_qty_pairs, *, cancelled_by="restaurant", reason: str = ""):
+        """
+        item_qty_pairs: iterable of (OrderItem, qty_to_cancel) — qty_to_cancel may be full or partial.
+        """
+        total_refund_delta = 0.0
+        event_details = []  # ← collect canceled line snapshots for notification
+
+        for it, qty in item_qty_pairs:
+            remaining_before = getattr(it, "active_quantity", 0)
+            cancel_qty = qty if qty is not None else remaining_before
+            if cancel_qty and cancel_qty > 0:
+                # Raises ValidationError if invalid
+                it.cancel(qty=cancel_qty, by=cancelled_by, reason=reason)
+
+                actually_canceled = min(cancel_qty, remaining_before)
+                line_refund = self._allocate_refund_for(it, actually_canceled)
+                total_refund_delta += line_refund
+
+                # per-item refund ledger (best-effort)
+                try:
+                    it.refund_amount = (it.refund_amount or 0) + line_refund
+                    it.save(update_fields=["refund_amount"])
+                except Exception:
+                    pass
+
+                # snapshot for this event
+                event_details.append({
+                    "order_item_id": it.id,
+                    "name": getattr(it.menu_item, "name", "Item"),
+                    "qty": int(actually_canceled),
+                    "unit_price": float(getattr(it, "unit_price", 0.0) or 0.0),
+                    "refund": float(line_refund),
+                    "reason": (it.cancellation_reason or reason or ""),
+                })
+
+        if total_refund_delta <= 0:
+            return  # nothing changed
+
+        # order-level refund bookkeeping
+        self.refund_amount = float(self.refund_amount or 0) + float(total_refund_delta)
+
+        # payment-method-specific handling (keeps prior semantics)
+        if self.payment_method in [self.PaymentMethod.STRIPE, self.PaymentMethod.CARD, self.PaymentMethod.PAYPAL]:
+            self.refund_status = self.RefundStatusChoices.REQUESTED  # keep original total intact
+        else:
+            self.total = max(float(self.total or 0) - float(total_refund_delta), 0.0)
+
+        # full cancel → flip status
+        if not self.active_items.exists():
+            if self.status not in [self.StatusChoices.CANCELLED, self.StatusChoices.REJECTED, self.StatusChoices.COMPLETED]:
+                self.status_before_cancelled = self.status
+                self.status = self.StatusChoices.CANCELLED
+                if reason and not self.cancellation_reason:
+                    self.cancellation_reason = reason
+
+        self.save(update_fields=[
+            "refund_amount", "refund_status", "total",
+            "status", "status_before_cancelled", "cancellation_reason"
+        ])
+
+        # 🔔 Notify customer (items + reason + refund); never break request
+        try:
+            self.notify_customer_items_canceled(canceled_lines=event_details, reason=reason, refund_delta=total_refund_delta)
+        except Exception:
+            pass
+
+    # ---------- Optional notifier (add-only, safe no-op if you don't wire tokens) ----------
+    # in Order model
+    def _get_customer_tokens(self) -> list[str]:
+        """
+        Fetch raw FCM tokens for this order's user.
+        Keep it simple: your send_push_notification accepts a flat token list.
+        """
+        try:
+            if not self.user_id:
+                return []
+            # adjust the import path if your TokenFCM lives elsewhere
+            from firebase.models import TokenFCM
+            return list(
+                TokenFCM.objects
+                    .filter(user_id=self.user_id)
+                    .values_list("token", flat=True)
+            )
+        except Exception:
+            logger.exception("Failed to fetch tokens for user_id=%s", self.user_id)
+            return []
+
+
+    def notify_partial_cancellation(self, reason: str = "", refund_delta: float = 0.0):
+        """
+        Back-compat shim: if older code calls this without item details,
+        send a short message that items were adjusted.
+        """
+        try:
+            self.notify_customer_items_canceled(
+                canceled_lines=[],  # unknown items in the old path
+                reason=reason,
+                refund_delta=refund_delta
+            )
+        except Exception:
+            pass
+
+    # def notify_customer_items_canceled(self, *, canceled_lines: list[dict], reason: str = "", refund_delta: float = 0.0):
+    #     """
+    #     Sends a push listing which items/qty were canceled and why — using your
+    #     send_push_notification(tokens, data) helper.
+    #     """
+    #     print(f"[FCM] notify called for order={self.id} user_id={self.user_id}")
+    #     if not self.user_id:
+    #         logger.info("[FCM] order=%s has no user_id; skip customer push", self.id)
+    #         return
+
+    #     tokens = self._get_customer_tokens()
+    #     if not tokens:
+    #         logger.info("[FCM] no tokens for user_id=%s; skip", self.user_id)
+    #         return
+
+    #     # Short readable summary for notification body
+    #     if canceled_lines:
+    #         summary = ", ".join([f"{x.get('name','Item')} x{x.get('qty',0)}" for x in canceled_lines])[:180]
+    #     else:
+    #         summary = "Some items were adjusted"
+
+    #     title = "Items canceled from your order"
+    #     body  = f"{summary}. Adjustment: {refund_delta:.2f}. {reason}".strip()
+
+    #     # Build the payload that YOUR helper expects
+    #     data = {
+    #         "campaign_title": title,
+    #         "campaign_message": body,
+    #         "campaign_image": "",                 # optional: put a banner/restaurant logo URL if you have one
+    #         "campaign_category": "order_update",  # handy to filter on the client
+    #         "campaign_is_active": "true",
+    #         "restaurant_name": getattr(self.restaurant, "name", "") or "",
+    #         "screen": "order_details",            # let the app deep-link to the order screen
+    #         "id": str(self.id),                   # internal db id if you need it on client
+    #         "order_id": str(self.order_id),       # public order uuid for deep-linking
+    #     }
+
+    #     try:
+    #         # adjust the import path to wherever you placed this helper
+    #         res = send_push_notification(tokens, data)
+    #         logger.info("[FCM] cancellation push sent: success=%s failed=%s", res.get("successful"), res.get("failed"))
+    #     except Exception as e:
+    #         logger.exception("Failed to send cancellation push for order=%s: %s", self.id, e)
             
 class OrderModifiersItems(BaseModel):
     modifiersOrderItems = models.ForeignKey(
@@ -688,6 +896,13 @@ class OrderedModifiers(BaseModel):
         verbose_name_plural = _("Ordered Modifiers")
 
 
+CANCELLED_BY_CHOICES = [
+    ("restaurant", "Restaurant"),
+    ("customer", "Customer"),
+    ("admin", "Admin"),
+    ("system", "System"),
+]
+
 class OrderItem(BaseModel):
     order = models.ForeignKey(
         Order, verbose_name=_(
@@ -704,18 +919,76 @@ class OrderItem(BaseModel):
         OrderedModifiers, verbose_name=_("modifiers"), blank=True
     )
 
+    is_canceled = models.BooleanField(default=False, db_index=True)
+    canceled_quantity = models.PositiveIntegerField(default=0)          # 0..quantity
+    canceled_by = models.CharField(max_length=20, choices=CANCELLED_BY_CHOICES, blank=True, null=True)
+    cancellation_reason = models.CharField(max_length=255, blank=True, null=True)
+    canceled_at = models.DateTimeField(blank=True, null=True)
+
+    # Optional: per-item refund accounting (kept simple)
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
     class Meta:
         ordering = ["-id"]
         verbose_name = _("Order Item")
         verbose_name_plural = _("Order Items")
 
     def __str__(self):
-        return f"{self.order.order_id} :: {self.menu_item.name}"
+        name = getattr(self.menu_item, "name", "Unknown item")
+        return f"{self.order.order_id} :: {name}"
+
 
     @property
-    def total_cost(self):
-        return self.menu_item.base_price * self.quantity
+    def active_quantity(self) -> int:
+        """How many units are still being prepared/delivered."""
+        q = max(int(self.quantity or 0) - int(self.canceled_quantity or 0), 0)
+        return 0 if self.is_canceled else q
 
+    @property
+    def unit_price(self) -> float:
+        """Base price used across the app (kept same as before)."""
+        return float(getattr(self.menu_item, "base_price", 0) or 0)
+
+    @property
+    def total_cost(self) -> float:
+        """
+        🔄 CHANGED: now uses active_quantity so existing places that rely on
+        total_cost automatically exclude canceled units.
+        """
+        return self.unit_price * self.active_quantity
+    
+    def cancel(self, *, qty: int | None = None, by: str = "restaurant", reason: str = ""):
+        """
+        Soft-cancel this line (full or partial). Idempotent and safe.
+        - qty=None or qty>=remaining → cancel the remainder.
+        - qty>remaining → raises ValidationError.
+        """
+        if self.is_canceled and (self.active_quantity == 0):
+            # Already fully canceled; nothing to do
+            return
+
+        remaining = self.active_quantity if self.active_quantity else (self.quantity - self.canceled_quantity)
+        if qty is None:
+            qty = remaining
+
+        if qty <= 0:
+            raise ValidationError("Cancel quantity must be > 0.")
+        if qty > remaining:
+            raise ValidationError("Cannot cancel more than remaining quantity.")
+
+        self.canceled_quantity = (self.canceled_quantity or 0) + qty
+        if self.canceled_quantity >= (self.quantity or 0):
+            self.is_canceled = True
+
+        self.canceled_by = by
+        if reason:
+            self.cancellation_reason = reason
+        self.canceled_at = timezone.now()
+        # Per-item refund_amount is computed by service layer (kept here as a field)
+        self.save(update_fields=[
+            "is_canceled", "canceled_quantity", "canceled_by",
+            "cancellation_reason", "canceled_at"
+        ])
 
 class Purchase(BaseModel):
     # ref: https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.products

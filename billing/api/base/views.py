@@ -54,7 +54,7 @@ from billing.api.base.serializers import (
     BaseTopUpSerializer, BaseTransactionsSerializer,
     BaseUberCreateQuoteSerializer, BaseVerifyOTPSerializer,
     BaseWalletSerializer, CostCalculationDeliverySerializer,BaseOrderDeliveryExpenseSerializer,
-    DeliveryRequestSerializer, OrderReminderSerializer,BaseCartItemSerializer)
+    DeliveryRequestSerializer, OrderReminderSerializer,BaseCartItemSerializer,PartialCancelRequestSerializer)
 from billing.api.v1.serializers import OrderSerializer
 from billing.clients.doordash_client import DoordashClient
 from billing.clients.paypal_client import PaypalClient
@@ -106,9 +106,12 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 import pandas as pd
+from firebase.models import TokenFCM
+from firebase.utils.fcm_helper import send_push_notification
+
 # from marketing.utils import send_email
 import pytz
-
+from django.db import transaction
 # stripe.api_key= env.str("CHATCHEF_STRIPE_SECRET_KEY")
 
 logger = get_logger()
@@ -316,6 +319,211 @@ class BaseOrderRetrieveUpdateDestroyAPIView(
     # serializer.save(**kwargs)
 
 
+class OrderPartialCancelAPIView(APIView):
+    """
+    POST /api/billing/v1/orders/<int:pk>/cancel-items/
+
+    Body (example):
+    {
+      "items": [
+        {"order_item_id": 123, "qty": 1, "reason": "Out of stock"},
+        {"order_item_id": 124, "qty": null}  // cancel remainder
+      ],
+      "cancelled_by": "restaurant",
+      "reason": "Kitchen issue"
+    }
+    """
+    permission_classes = [OrderPermission]  # IsAuthenticated is already inside OrderPermission in your project; add if needed
+    lookup_url_kwarg = "pk"
+
+    def _get_order(self, **kwargs) -> Order:
+        if self.lookup_url_kwarg in kwargs:
+            return get_object_or_404(
+                Order.objects.select_related("restaurant", "company"),
+                pk=kwargs[self.lookup_url_kwarg]
+            )
+        raise NotFound("Order id is required in URL.")
+
+    def _is_owner(self, request, order: Order) -> bool:
+        return getattr(request.user, "company", None) == order.company
+
+    def _tokens_for_user(self, user_id: int) -> list[str]:
+        try:
+            if not user_id:
+                return []
+            return list(
+                TokenFCM.objects.filter(user_id=user_id)
+                .values_list("token", flat=True)
+            )
+        except Exception:
+            logger.exception("Failed fetching FCM tokens for user_id=%s", user_id)
+            return []
+
+    def post(self, request, *args, **kwargs):
+        order = self._get_order(**kwargs)
+
+        # Block terminal states
+        terminal = {
+            Order.StatusChoices.CANCELLED,
+            Order.StatusChoices.REJECTED,
+            Order.StatusChoices.COMPLETED,
+        }
+        if order.status in terminal:
+            raise ParseError("Order is already completed/cancelled/rejected.")
+        if order.status == Order.StatusChoices.RIDER_PICKED_UP:
+            raise ParseError("Rider has already picked up the order; items cannot be cancelled.")
+        if not self._is_owner(request, order):
+            raise PermissionDenied("Only the restaurant can partially cancel items on this order.")
+
+        serializer = PartialCancelRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+        cancelled_by = payload.get("cancelled_by") or "restaurant"
+        default_reason = (payload.get("reason") or "").strip()
+
+        # Collect item ids
+        item_ids = [e["order_item_id"] for e in payload["items"]]
+        if not item_ids:
+            raise ParseError("No items provided to cancel.")
+
+        with transaction.atomic():
+            # Lock order row
+            order = Order.objects.select_for_update().get(pk=order.pk)
+
+            # Lock items (no joins → avoids "FOR UPDATE cannot be applied to the nullable side of an outer join")
+            items_qs = (
+                OrderItem.objects
+                .filter(order=order, id__in=item_ids)
+                .select_for_update()
+            )
+            items_map = {it.id: it for it in items_qs}
+
+            missing = [iid for iid in item_ids if iid not in items_map]
+            if missing:
+                raise NotFound(f"OrderItem(s) not found or not in this order: {missing}")
+
+            # Track pre-state for canceled_qty delta
+            pre_canceled_qty = {it.id: int(it.canceled_quantity or 0) for it in items_map.values()}
+            prev_status = order.status
+
+            # Build pairs; store per-line reason on the item, used by OrderItem.cancel(...)
+            pairs = []
+            for entry in payload["items"]:
+                it = items_map[entry["order_item_id"]]
+                qty = entry.get("qty", None)  # None → cancel remainder
+                line_reason = (entry.get("reason") or default_reason).strip()
+                if line_reason:
+                    it.cancellation_reason = line_reason
+                pairs.append((it, qty))
+
+            # Apply model logic (does refunds and status handling)
+            order.apply_item_cancellations(
+                pairs,
+                cancelled_by=cancelled_by,
+                reason=default_reason
+            )
+
+            # Refresh order meta snapshot shown in other GETs
+            try:
+                sr = BaseOrderGetSerializerWithModifiersDetails(order)
+                order.order_item_meta_data = sr.data.get("orderitem_set", [])
+                order.save(update_fields=["order_item_meta_data"])
+            except Exception:
+                pass
+
+            # If fully cancelled now and previously not, cancel delivery (if that’s your policy)
+            order.refresh_from_db()
+            if (
+                order.status == Order.StatusChoices.CANCELLED
+                and prev_status != Order.StatusChoices.CANCELLED
+                and prev_status != Order.StatusChoices.PENDING
+            ):
+                try:
+                    # DeliveryManager should be in the same module/file; if elsewhere, import from there.
+                    DeliveryManager().cancel_delivery(instance=order)
+                except Exception:
+                    pass
+
+            # Build response for only the items in this request
+            # Batch read avoids per-item refresh queries
+            post_rows = (
+                OrderItem.objects
+                .filter(id__in=item_ids)
+                .values('id', 'quantity', 'canceled_quantity', 'is_canceled', 'refund_amount', 'cancellation_reason')
+            )
+            post_map = {r['id']: r for r in post_rows}
+
+            items_out = []
+            for entry in payload["items"]:
+                iid = entry["order_item_id"]
+                post = int(post_map[iid]['canceled_quantity'] or 0)
+                pre = pre_canceled_qty.get(iid, 0)
+                delta = max(post - pre, 0)
+
+                it = items_map[iid]
+                mi = it.menu_item
+                active_qty = 0 if post_map[iid]['is_canceled'] else max(int(post_map[iid]['quantity'] or 0) - post, 0)
+
+                items_out.append({
+                    "order_item_id": iid,
+                    "name": getattr(mi, "name", "Item"),
+                    "canceled_qty": delta,  # canceled in THIS request
+                    "active_quantity": active_qty,
+                    "is_canceled": post_map[iid]['is_canceled'],
+                    "reason": post_map[iid]['cancellation_reason'] or default_reason,
+                    "refund_amount_on_item": float(post_map[iid]['refund_amount'] or 0.0),
+                })
+            # ----- CUSTOMER PUSH (schedule after commit) ----------------------
+            try:
+                user_id = order.user_id
+                if user_id:
+                    tokens = self._tokens_for_user(user_id)
+
+                    # "Burger x1, Fries x2"
+                    names = []
+                    for it in items_out:
+                        qty = int(it.get("canceled_qty") or 0)
+                        if qty > 0:
+                            names.append(f"{it.get('name','Item')} x{qty}")
+                    summary = ", ".join(names)[:180] if names else "Some items were adjusted"
+
+                    refund_delta = round(sum(float(it.get("refund_amount_on_item") or 0.0) for it in items_out), 2)
+
+                    payload_push = {
+                        "campaign_title": "Items canceled from your order",
+                        "campaign_message": f"{summary}. Adjustment: {refund_delta:.2f}. {default_reason}".strip(),
+                        "campaign_image": "",
+                        "campaign_category": "order_update",
+                        "campaign_is_active": "true",
+                        "restaurant_name": getattr(order.restaurant, "name", "") or "",
+                        "screen": "order_details",
+                        "id": str(order.id),
+                        "order_id": str(order.order_id),
+                    }
+
+                    if tokens:
+                        transaction.on_commit(lambda: send_push_notification(tokens, payload_push))
+                    else:
+                        logger.info("[FCM] No tokens for user_id=%s; skipping push", user_id)
+                else:
+                    logger.info("[FCM] Order %s has no user_id; skipping push", order.id)
+            except Exception:
+                logger.exception("Failed scheduling cancellation push for order_id=%s", order.id)
+            # ------------------------------------------------------------------
+
+        # Minimal, clear response
+        return Response(
+            {
+                "order_id": str(order.order_id),
+                "status": order.status,
+                "payment_method": order.payment_method,
+                "total": float(order.total or 0.0),                       # amount due now (COD/Wallet updated; card unchanged)
+                "refund_amount_total": float(order.refund_amount or 0.0),  # cumulative refund ledger
+                "items": items_out,
+                "order_item_meta_data": BaseOrderGetSerializerWithModifiersDetails(order).data.get("orderitem_set"),
+            },
+            status=status.HTTP_200_OK,
+        )
 class BaseDailySaleListAPIView(ListAPIView):
     serializer_class = BaseDailyOrderSerializer
 
@@ -4395,3 +4603,129 @@ class BaseUberStuckOrdersAPIView(APIView):
             "stuck_orders": stuck_results,
             "delivered_orders": [serialize_delivered(order) for order in delivered_orders],
         })
+
+
+
+
+import json
+import traceback
+import requests  # needed for get_lark_token
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
+
+from billing.utilities.lark.jobrunner import ht_sync_runner
+from lark_automation.sync_ht_payout import push_all_hungry_orders_direct
+from billing.utilities.lark.lark_helpers import lark_update_fields
+
+# shared secret (matches Lark header)
+LARK_WEBHOOK_TOKEN = "UKqiyV4W0iHlDDNW9-352CqWmig-ZmJDy64jNIB5wxU"
+
+#  fixed IDs (don’t send these from Lark)
+LARK_BASE_ID = "OGP4b0T04a2QmesErNsuSkRTs4P"
+CONTROL_TABLE_ID = "tblzjjzgvDMYfb7c"  # HT control table (has the status field)
+
+# DO control table (for DO module runs)
+LARK_DO_BASE_ID = "OGP4b0T04a2QmesErNsuSkRTs4P"
+LARK_DO_TABLE_ID = "tblIXtMH8WhFDQ9Z"
+
+# Lark auth for updating Status fields
+LARK_APP_ID = "cli_a8030393dd799010"
+LARK_APP_SECRET = "8ZuSlhJWZrXCcyHHOkU3kfHF2BlPGKrY"
+
+
+def get_lark_token():
+    url = "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal/"
+    res = requests.post(url, json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET})
+    res.raise_for_status()
+    return res.json().get("tenant_access_token")
+
+
+# ---------- Reusable helpers ----------
+
+def get_field_definitions_for(base_id: str, table_id: str, *, token: str = None):
+    """Return field_name -> {type, options} (options only for SingleSelect)."""
+    token = token or get_lark_token()
+    url = f"https://open.larksuite.com/open-apis/bitable/v1/apps/{base_id}/tables/{table_id}/fields"
+    headers = {"Authorization": f"Bearer {token}"}
+    res = requests.get(url, headers=headers)
+    res.raise_for_status()
+    data = res.json()
+
+    field_map = {}
+    for f in (data.get("data", {}) or {}).get("items", []) or []:
+        opts = []
+        if f.get("type") == 3:  # SingleSelect
+            raw = (f.get("property") or {}).get("options", []) or []
+            # Options can be under "name" or "text"
+            opts = [(o.get("name") or o.get("text")) for o in raw if (o.get("name") or o.get("text"))]
+        field_map[f["field_name"]] = {"type": f.get("type"), "options": opts}
+    return field_map
+
+
+def resolve_field_name_ci(field_info: dict, wanted: str) -> str:
+    """Resolve actual field name in Bitable, case-insensitive match."""
+    wanted_l = str(wanted).lower()
+    for fname in field_info.keys():
+        if str(fname).lower() == wanted_l:
+            return fname
+    return wanted  # fallback
+
+
+def choose_select_option(field_info: dict, field_name: str, desired: str) -> str:
+    """Pick a valid SingleSelect option; fallback to first available or desired."""
+    real = resolve_field_name_ci(field_info, field_name)
+    options = (field_info.get(real) or {}).get("options", []) or []
+    return desired if desired in options else (options[0] if options else desired)
+
+
+# ---------- HT webhook ----------
+
+@csrf_exempt
+def lark_ht_update(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST required")
+    if request.headers.get("X-Lark-Token") != LARK_WEBHOOK_TOKEN:
+        return HttpResponseForbidden("Invalid token")
+
+    try:
+        body = json.loads(request.body or "{}")
+    except Exception:
+        return HttpResponseBadRequest("Invalid JSON")
+
+    control_record_id = body.get("control_record_id")
+    if not control_record_id:
+        return HttpResponseBadRequest("Missing control_record_id")
+
+    token = get_lark_token()
+
+    # Pull valid options for the SingleSelect "status" FROM THE HT CONTROL TABLE
+    field_info = get_field_definitions_for(LARK_BASE_ID, CONTROL_TABLE_ID, token=token)
+    status_field = resolve_field_name_ci(field_info, "status")
+    running = choose_select_option(field_info, status_field, "Running")
+
+    # Set status: Running
+    try:
+        lark_update_fields(LARK_BASE_ID, CONTROL_TABLE_ID, control_record_id, token, {status_field: running})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Failed to set Running: {e}"}, status=500)
+
+    # Background job flips to Done/Failed using the same table/field
+    def job():
+        try:
+            push_all_hungry_orders_direct()
+            done = choose_select_option(field_info, status_field, "Done")
+            lark_update_fields(LARK_BASE_ID, CONTROL_TABLE_ID, control_record_id, token, {status_field: done})
+        except Exception:
+            traceback.print_exc()
+            failed = choose_select_option(field_info, status_field, "Failed")
+            try:
+                lark_update_fields(LARK_BASE_ID, CONTROL_TABLE_ID, control_record_id, token, {status_field: failed})
+            except Exception:
+                pass
+
+    started = ht_sync_runner.start(target=job)
+    if not started:
+        return JsonResponse({"status": "busy", "message": "HT update already running"}, status=202)
+
+    return JsonResponse({"status": "queued", "module": "HT", "started_at": timezone.now().isoformat()}, status=202)

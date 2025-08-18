@@ -43,6 +43,7 @@ from billing.api.v1.views import (BillingProfileRetrieveUpdateDestroyAPIView,
                                ExportCustomerOrders,CartValidationAPIView,UberStuckOrdersAPIView,VRInvoiceWebhookView,
                              OrderDetailsWithHistoryAPIView,PendingOrdersAPIView)
 
+from billing.api.base.views import OrderPartialCancelAPIView,lark_ht_update
 
 router = DefaultRouter()
 router.register("payment-save", PaymentMethodSavedView,
@@ -181,6 +182,8 @@ urlpatterns = [
    
     path("customer-orders/", ExportCustomerOrders.as_view(), name="export-customer-orders"),
     path("vr-invoice/", VRInvoiceWebhookView.as_view(), name="vr-invoice"),
+     path("orders/<int:pk>/cancel-items/", OrderPartialCancelAPIView.as_view(), name="orders-partial-cancel"),
+         path("ht/update/", lark_ht_update, name="lark-ht-update"),
 
 
 
