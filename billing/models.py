@@ -33,6 +33,11 @@ from firebase.utils.fcm_helper import FCMHelper
 from firebase.models import Platform as FirebasePlatform
 from django.db import transaction
 from django.db.models import Q, F
+# rider_ratings/models.py
+from django.conf import settings
+from django.db import models
+from django.db.models import UniqueConstraint
+from django.utils import timezone
 
 
 import string
@@ -1729,3 +1734,58 @@ class RestaurantContract(models.Model):
     def __str__(self):
         return f"Contract #{self.id}"
     
+
+
+
+
+
+class RiderRating(models.Model):
+    """One rating per (order, customer) for RAIDER_APP deliveries."""
+    TAGS = [
+        ("on_time", "On-time"),
+        ("polite", "Polite"),
+        ("careful", "Handled Food Carefully"),
+        ("late", "Late Delivery"),
+        ("rude", "Rude Behavior"),
+        ("spillage", "Food Spillage"),
+        ("wrong_address", "Wrong Address"),
+    ]
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="rider_ratings")
+    customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="rider_ratings")
+
+    raider_id = models.CharField(max_length=255, db_index=True)  # from Order.raider_id
+    rider_name = models.CharField(max_length=255, blank=True, null=True)
+
+    stars = models.PositiveSmallIntegerField()  # 1..5
+    comment = models.TextField(blank=True)
+    tags = models.JSONField(default=list, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(blank=True, null=True)
+    is_edited = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["order", "customer"], name="unique_rider_rating_per_order_customer"),
+        ]
+        indexes = [
+            models.Index(fields=["raider_id", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.stars}★ for {self.raider_id} (order #{self.order_id})"
+
+
+class RiderScore(models.Model):
+    """Denormalized aggregates for instant display, keyed by raider_id."""
+    raider_id = models.CharField(max_length=255, unique=True)
+    rider_name = models.CharField(max_length=255, blank=True, null=True)
+
+    ratings_count = models.PositiveIntegerField(default=0)
+    ratings_sum = models.PositiveIntegerField(default=0)
+    rating_avg = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
+    last_rated_at = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.rider_name or self.raider_id}: {self.rating_avg}★ ({self.ratings_count})"

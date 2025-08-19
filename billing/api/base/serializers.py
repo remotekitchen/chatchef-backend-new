@@ -7,7 +7,7 @@ from billing.models import (BillingProfile, DeliveryFeeAssociation, Invoice,
                             InvoiceItem, Order, OrderedModifiers, OrderItem,
                             OrderModifiersItems, OrderReminder, PaymentDetails,
                             PaymentMethods, PayoutHistory,PayoutHistoryForHungry, RestaurantFee,
-                            StripeConnectAccount, Transactions, Wallet)
+                            StripeConnectAccount, Transactions, Wallet,RiderRating)
 from billing.utilities.check_bogo import check_bogo
 from billing.utilities.check_bogo import check_bxgy
 from hungrytiger.settings.defaults import ENV_TYPE
@@ -904,3 +904,176 @@ class BaseOrderDeliveryExpenseSerializer(serializers.ModelSerializer):
 class BaseCartItemSerializer(serializers.Serializer):
     menu_item_id = serializers.IntegerField()
     quantity = serializers.IntegerField(min_value=1)
+
+
+from billing.models import RiderRating, RiderScore  # adjust import paths
+import json
+import hashlib
+import re
+
+from django.utils import timezone
+from django.conf import settings
+
+# ---- config ----
+EDIT_WINDOW_HOURS = getattr(settings, "DRIVER_RATING_EDIT_WINDOW_HOURS", 24)
+
+ALLOWED_STATUSES = {
+    Order.StatusChoices.RIDER_CONFIRMED_DROPOFF_ARRIVAL,
+    Order.StatusChoices.COMPLETED,
+}
+
+# ---- helpers ----
+def _parse_driver_info(info):
+    """Accept dict, list[dict], or JSON string; return a dict."""
+    if isinstance(info, str):
+        try:
+            info = json.loads(info)
+        except Exception:
+            return {}
+    if isinstance(info, list) and info:
+        info = info[0]
+    return info if isinstance(info, dict) else {}
+
+def _name_from_info(info: dict) -> str | None:
+    first = (info.get("first_name") or "").strip()
+    last  = (info.get("last_name") or "").strip()
+    name  = (info.get("name") or "").strip()
+    full  = (f"{first} {last}").strip()
+    return (full or name) or None
+
+def _raider_email(order: Order) -> str | None:
+    """Lowercased email from driver_info (list/dict/json)."""
+    info = _parse_driver_info(order.driver_info)
+    email = (info.get("email") or "").strip().lower()
+    return email or None
+
+def _email_key(email: str) -> str:
+    """Stable, privacy-safe key; no raw email in DB or URL."""
+    return "emailsha256:" + hashlib.sha256(email.encode("utf-8")).hexdigest()
+
+def _derive_raider(order: Order):
+    """
+    Use rider's EMAIL (hashed) as stable key so ratings aggregate across orders.
+    raider_id = 'emailsha256:<hash>' if email available, else fallback to existing.
+    rider_name = delivery_man → driver_info[first/last or name] → 'Rider'
+    """
+    email = _raider_email(order)
+    if email:
+        rid = _email_key(email)
+    else:
+        rid = str(order.raider_id or order.id)  # fallback (not ideal, but safe)
+
+    name = (order.delivery_man or "").strip()
+    if not name:
+        name = _name_from_info(_parse_driver_info(order.driver_info)) or ""
+    return rid, (name or "Rider")
+
+# ---- serializers ----
+class BaseRiderRatingCreateSerializer(serializers.ModelSerializer):
+    tags = serializers.ListField(child=serializers.CharField(), required=False)
+
+    class Meta:
+        model = RiderRating
+        fields = ("stars", "comment", "tags")
+
+    def validate_stars(self, v):
+        if v < 1 or v > 5:
+            raise serializers.ValidationError("Stars must be 1–5.")
+        return v
+
+    def validate(self, data):
+        request = self.context["request"]
+        order: Order = self.context["order"]
+
+        if order.delivery_platform != Order.DeliveryPlatform.RAIDER_APP:
+            raise serializers.ValidationError("Rating is only available for RAIDER_APP deliveries.")
+        if request.user != order.user:
+            raise serializers.ValidationError("You can only rate your own order.")
+        if order.status not in ALLOWED_STATUSES:
+            raise serializers.ValidationError("You can rate after delivery is complete.")
+        # robust: don't rely on related_name existing
+        if RiderRating.objects.filter(order=order, customer=request.user).exists():
+            raise serializers.ValidationError("You already rated this delivery.")
+        if data.get("stars", 5) <= 2 and not data.get("comment"):
+            raise serializers.ValidationError("Please add a short comment for low ratings.")
+        return data
+
+    def create(self, validated):
+        order: Order = self.context["order"]
+        user = self.context["request"].user
+
+        raider_id, rider_name = _derive_raider(order)
+
+        # keep Order.raider_id consistent (nice-to-have)
+        try:
+            if str(order.raider_id or "") != raider_id:
+                order.raider_id = raider_id
+                order.save(update_fields=["raider_id"])
+        except Exception:
+            pass
+
+        rating = RiderRating.objects.create(
+            order=order,
+            customer=user,
+            raider_id=raider_id,
+            rider_name=rider_name,
+            **validated
+        )
+
+        # Ensure RiderScore carries a real name (not the "Rider" placeholder)
+        try:
+            if rider_name and rider_name != "Rider":
+                obj, created = RiderScore.objects.get_or_create(
+                    raider_id=raider_id,
+                    defaults={"rider_name": rider_name}
+                )
+                if not created and (not obj.rider_name or obj.rider_name == "Rider"):
+                    obj.rider_name = rider_name
+                    obj.save(update_fields=["rider_name"])
+        except Exception:
+            pass
+
+        return rating
+
+
+class BaseRiderRatingUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RiderRating
+        fields = ("stars", "comment", "tags")
+
+    def validate(self, data):
+        rr = self.instance
+        if (timezone.now() - rr.created_at).total_seconds() > EDIT_WINDOW_HOURS * 3600:
+            raise serializers.ValidationError("Edit window has expired.")
+        stars = data.get("stars", rr.stars)
+        if not (1 <= stars <= 5):
+            raise serializers.ValidationError("Stars must be 1–5.")
+        if stars <= 2 and not data.get("comment", rr.comment):
+            raise serializers.ValidationError("Please add a short comment for low ratings.")
+        return data
+
+    def update(self, instance, validated):
+        old = instance.stars
+        for k, v in validated.items():
+            setattr(instance, k, v)
+        instance.is_edited = True
+        instance.edited_at = timezone.now()
+        instance.save()
+
+        # adjust aggregates if stars changed
+        if instance.stars != old:
+            score, _ = RiderScore.objects.get_or_create(
+                raider_id=instance.raider_id,
+                defaults={"rider_name": instance.rider_name or "Rider"}
+            )
+            score.ratings_sum = (score.ratings_sum or 0) + (instance.stars - old)
+            cnt = score.ratings_count or 0
+            score.rating_avg = 0 if cnt == 0 else round(score.ratings_sum / cnt, 2)
+            score.save(update_fields=["ratings_sum", "rating_avg"])
+        return instance
+
+
+class BaseRiderRatingReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RiderRating
+        fields = ("id", "stars", "comment", "tags", "created_at", "is_edited", "raider_id", "rider_name")
