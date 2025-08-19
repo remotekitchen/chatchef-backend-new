@@ -54,7 +54,9 @@ from billing.api.base.serializers import (
     BaseTopUpSerializer, BaseTransactionsSerializer,
     BaseUberCreateQuoteSerializer, BaseVerifyOTPSerializer,
     BaseWalletSerializer, CostCalculationDeliverySerializer,BaseOrderDeliveryExpenseSerializer,
-    DeliveryRequestSerializer, OrderReminderSerializer,BaseCartItemSerializer,PartialCancelRequestSerializer)
+    DeliveryRequestSerializer, OrderReminderSerializer,BaseCartItemSerializer,PartialCancelRequestSerializer,
+    BaseRiderRatingCreateSerializer, BaseRiderRatingReadSerializer,BaseRiderRatingUpdateSerializer
+)
 from billing.api.v1.serializers import OrderSerializer
 from billing.clients.doordash_client import DoordashClient
 from billing.clients.paypal_client import PaypalClient
@@ -63,7 +65,7 @@ from billing.clients.uber_client import UberClient
 from billing.models import (BillingProfile, DeliveryFeeAssociation, Invoice,
                             Order, OrderItem, PaymentDetails, PaymentMethods,
                             PayoutHistory,PayoutHistoryForHungry, PaypalCapturePayload, Purchase,
-                            RestaurantFee, StripeConnectAccount, Transactions)
+                            RestaurantFee, StripeConnectAccount, Transactions,RiderRating, RiderScore)
 from billing.tasks import order_reminder_setter, send_otp
 from billing.utiils import (GiftCardManager, MakeTransactions,
                             get_Uber_Credentials, get_uber_header)
@@ -108,6 +110,12 @@ from django.core.files.storage import default_storage
 import pandas as pd
 from firebase.models import TokenFCM
 from firebase.utils.fcm_helper import send_push_notification
+
+# rider_ratings/views.py
+from rest_framework import generics, permissions
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+
 
 # from marketing.utils import send_email
 import pytz
@@ -4729,3 +4737,106 @@ def lark_ht_update(request):
         return JsonResponse({"status": "busy", "message": "HT update already running"}, status=202)
 
     return JsonResponse({"status": "queued", "module": "HT", "started_at": timezone.now().isoformat()}, status=202)
+
+
+
+
+
+# ---- Create rating ----
+class BaseRateRiderView(generics.CreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = BaseRiderRatingCreateSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        order_pk = self.kwargs["order_pk"]  # int pk; change to uuid if your URL uses it
+        order = get_object_or_404(Order.objects.select_related("user"), pk=order_pk)
+        ctx["order"] = order
+        return ctx
+
+
+# ---- Get / Edit my rating for an order ----
+class BaseOrderRiderRatingView(generics.RetrieveUpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        return BaseRiderRatingUpdateSerializer if self.request.method in ["PUT", "PATCH"] else BaseRiderRatingReadSerializer
+
+    def get_object(self):
+        order_pk = self.kwargs["order_pk"]
+        order = get_object_or_404(Order, pk=order_pk)
+        return get_object_or_404(RiderRating, order=order, customer=self.request.user)
+
+    # Allow GET and PATCH from client
+    http_method_names = ["get", "patch", "head", "options"]
+
+
+# ---- Score by raider_id (when you already know it) ----
+class BaseRiderScoreView(generics.RetrieveAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def retrieve(self, request, *args, **kwargs):
+        rid = kwargs["raider_id"]  # this is the internal key (e.g., "emailsha256:<hash>")
+        score = RiderScore.objects.filter(raider_id=rid).first()
+
+        if not score:
+            agg = RiderRating.objects.filter(raider_id=rid).aggregate(cnt=Count("id"), sm=Sum("stars"))
+            cnt, sm = agg["cnt"] or 0, agg["sm"] or 0
+            name = (RiderRating.objects
+                    .filter(raider_id=rid)
+                    .exclude(rider_name__isnull=True).exclude(rider_name__exact="")
+                    .order_by("-created_at").values_list("rider_name", flat=True).first()) or "Rider"
+            score = RiderScore.objects.create(
+                raider_id=rid, rider_name=name,
+                ratings_count=cnt, ratings_sum=sm,
+                rating_avg=(0 if cnt == 0 else round(sm / cnt, 2))
+            )
+
+        return Response({
+            "raider_id": score.raider_id,
+            "rider_name": score.rider_name,
+            "count": score.ratings_count,
+            "avg": float(score.rating_avg),
+            "last_rated_at": score.last_rated_at,
+        })
+
+
+# ---- Score by order (no email/raider_id in URL) ----
+class BaseRiderScoreByOrderView(generics.RetrieveAPIView):
+    """
+    GET /rider-ratings/orders/<order_pk>/rider-score/
+    No email in the path. We derive the rider identity from the order,
+    then aggregate all ratings for that rider.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def retrieve(self, request, *args, **kwargs):
+        order_pk = self.kwargs["order_pk"]
+        order = get_object_or_404(Order, pk=order_pk)
+
+        # Reuse the same logic used at creation to ensure we hit the same key
+        # We import the helper via serializer to avoid duplication, or inline the logic here.
+        from .serializers import _derive_raider  # local import to keep things tidy
+        raider_id, _rider_name = _derive_raider(order)
+
+        score = RiderScore.objects.filter(raider_id=raider_id).first()
+        if not score:
+            agg = RiderRating.objects.filter(raider_id=raider_id).aggregate(cnt=Count("id"), sm=Sum("stars"))
+            cnt, sm = agg["cnt"] or 0, agg["sm"] or 0
+            name = (RiderRating.objects
+                    .filter(raider_id=raider_id)
+                    .exclude(rider_name__isnull=True).exclude(rider_name__exact="")
+                    .order_by("-created_at").values_list("rider_name", flat=True).first()) or "Rider"
+            score = RiderScore.objects.create(
+                raider_id=raider_id, rider_name=name,
+                ratings_count=cnt, ratings_sum=sm,
+                rating_avg=(0 if cnt == 0 else round(sm / cnt, 2))
+            )
+
+        return Response({
+            "raider_id": score.raider_id,   # internal key; you don't have to show it to UI
+            "rider_name": score.rider_name,
+            "count": score.ratings_count,
+            "avg": float(score.rating_avg),
+            "last_rated_at": score.last_rated_at,
+        })

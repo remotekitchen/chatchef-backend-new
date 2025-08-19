@@ -12,7 +12,7 @@ from billing.models import (BillingProfile, DeliveryFeeAssociation,
                             PaypalCapturePayload, Purchase, RaiderAppAuth,
                             RestaurantFee, StripeCapturePayload,
                             StripeConnectAccount, Transactions, UberAuthModel,
-                            Wallet, UnregisteredGiftCard, RestaurantContract)
+                            Wallet, UnregisteredGiftCard, RestaurantContract,RiderRating,RiderScore)
 
 admin.site.register(PaypalCapturePayload)
 
@@ -180,4 +180,7 @@ admin.site.register(UberAuthModel)
 admin.site.register(PayoutHistory)
 admin.site.register(RaiderAppAuth)
 admin.site.register(UnregisteredGiftCard)
+
+admin.site.register(RiderRating)
+admin.site.register(RiderScore)
 

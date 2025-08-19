@@ -32,6 +32,13 @@ from billing.clients.doordash_client import DoordashClient
 from django.db import transaction
 from billing.utilities.order_rewards import OrderRewards
 
+# driver_ratings/signals.py
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+from django.utils import timezone
+
+from billing.models import RiderRating, RiderScore
+
 logger = get_logger()
 
 
@@ -483,3 +490,40 @@ def notify_quick_login_users_on_order(sender, instance, created, **kwargs):
 
     # Send to all tokens in one go
     send_order_push_admin(tokens, payload_data)
+
+
+
+
+
+
+
+
+# rider_ratings/signals.py
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+from django.utils import timezone
+from billing.models import RiderRating, RiderScore
+
+def _apply(score: RiderScore, dcount: int, dsum: int):
+    score.ratings_count = max(0, score.ratings_count + dcount)
+    score.ratings_sum = max(0, score.ratings_sum + dsum)
+    score.rating_avg = 0 if score.ratings_count == 0 else round(score.ratings_sum / score.ratings_count, 2)
+    score.last_rated_at = timezone.now()
+    score.save(update_fields=["ratings_count", "ratings_sum", "rating_avg", "last_rated_at"])
+
+@receiver(post_save, sender=RiderRating)
+def on_rating_saved(sender, instance: RiderRating, created, **kwargs):
+    score, _ = RiderScore.objects.get_or_create(
+        raider_id=instance.raider_id,
+        defaults={"rider_name": instance.rider_name},
+    )
+    if created:
+        _apply(score, +1, instance.stars)
+
+@receiver(post_delete, sender=RiderRating)
+def on_rating_deleted(sender, instance: RiderRating, **kwargs):
+    try:
+        score = RiderScore.objects.get(raider_id=instance.raider_id)
+    except RiderScore.DoesNotExist:
+        return
+    _apply(score, -1, -instance.stars)

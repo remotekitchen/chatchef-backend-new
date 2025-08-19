@@ -57,12 +57,12 @@ from core.api.paginations import StandardResultsSetPagination,HotelStandardResul
 from django.db import transaction
 from accounts.api.base.serializers import  HotelOwnerUserSerializer
 from django.contrib.auth import get_user_model
-
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache, cache_control
 User = get_user_model()
 import json
-
-
-
+from hotel.cache_utils import invalidate_hotel_search_cache
+from django.db.models import F
 logger = logging.getLogger(__name__)
 
 
@@ -120,6 +120,8 @@ class BaseHotelViewSet(viewsets.ReadOnlyModelViewSet):
                 {"error": "Invalid date format. Use YYYY-MM-DD."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+    
     @action(detail=False, methods=["get"], url_path="search")
     def search_hotels(self, request):
         lat = request.query_params.get("lat")
@@ -1164,6 +1166,7 @@ class BaseBookingViewSet(viewsets.ViewSet):
                             return Response({
                                 "error": "Coupon was already used concurrently. Please try another coupon or booking."
                             }, status=400)
+                    transaction.on_commit(invalidate_hotel_search_cache)
                         
 
             except Exception as e:
@@ -1374,6 +1377,7 @@ class BaseBookingViewSet(viewsets.ViewSet):
                             return Response({
                                 "error": "Coupon was already used concurrently. Please try another coupon or booking."
                             }, status=400)
+                    transaction.on_commit(invalidate_hotel_search_cache) 
 
             except Exception as e:
                 # Any error rolls back the transaction and returns error response
@@ -1490,29 +1494,57 @@ class BaseBookingViewSet(viewsets.ViewSet):
     def cancel_booking(self, request, pk=None):
         booking = get_object_or_404(Booking.objects.select_related("guest"), pk=pk)
 
+        # --- ownership checks (same as yours) ---
         if booking.guest.user:
             if booking.guest.user != request.user:
                 return Response({"error": "You can only cancel your own bookings."}, status=403)
         else:
             if booking.guest.email.lower() != request.user.email.lower():
                 return Response({"error": "You can only cancel your own bookings."}, status=403)
-            
-        # Prevent cancelling paid or completed bookings
+
+        # --- state checks (same as yours) ---
         if booking.payment_status == "paid":
             return Response({"error": "Paid bookings cannot be cancelled."}, status=400)
-
         if booking.status in ["completed", "cancelled", "no_show"]:
             return Response({"error": f"Booking is already {booking.status} and cannot be cancelled."}, status=400)
+        if not booking.is_cancelable():
+            return Response({"error": "Booking cannot be cancelled."}, status=400)
 
+        # --- cancel + RESTORE STOCK atomically ---
+        with transaction.atomic():
+            if booking.booking_type == "hourly":
+                # TODO: implement reverse of your block_hourly_availability()
+                # unblock_hourly_availability(booking, ...)
+                pass
+            else:
+                # DAILY: restore for every day in the stay
+                dates = get_date_range(booking.check_in_date, booking.check_out_date)
 
-        if booking.is_cancelable():
+                if booking.room_type_id:
+                    # single-room booking
+                    (RoomAvailability.objects
+                        .select_for_update()
+                        .filter(room_type=booking.room_type, date__in=dates)
+                        .update(available_rooms=F("available_rooms") + booking.number_of_rooms))
+                else:
+                    # multi-room booking: restore per item
+                    items = BookingRoomItem.objects.select_related("room_type").filter(booking=booking)
+                    for item in items:
+                        (RoomAvailability.objects
+                            .select_for_update()
+                            .filter(room_type=item.room_type, date__in=dates)
+                            .update(available_rooms=F("available_rooms") + item.number_of_rooms))
+
+            # mark booking cancelled
             booking.status = "cancelled"
             booking.cancellation_date = timezone.now()
             booking.cancellation_reason = request.data.get("reason", "")
-            booking.save()
-            return Response({"success": True, "message": "Booking cancelled."})
+            booking.save(update_fields=["status", "cancellation_date", "cancellation_reason"])
 
-        return Response({"error": "Booking cannot be cancelled."}, status=400)
+            # make search show updated availability on the very next call
+            transaction.on_commit(invalidate_hotel_search_cache)
+
+        return Response({"success": True, "message": "Booking cancelled and rooms restored."})
 
 
     # viewing own booking list

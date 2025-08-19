@@ -32,7 +32,8 @@ from billing.api.base.views import (
 
     BaseExportCustomerOrders,BaseCartValidationAPIView,BaseUberStuckOrdersAPIView,BaseVRInvoiceWebhookView,
 
-   BaseExportCustomerOrders,BaseCartValidationAPIView,BaseUberStuckOrdersAPIView,BaseOrderDetailsWithHistoryAPIView,BasePendingOrdersAPIView
+   BaseExportCustomerOrders,BaseCartValidationAPIView,BaseUberStuckOrdersAPIView,BaseOrderDetailsWithHistoryAPIView,BasePendingOrdersAPIView,
+   BaseRateRiderView,BaseOrderRiderRatingView,BaseRiderScoreView,BaseRiderScoreByOrderView
 
     )
 
@@ -305,4 +306,17 @@ class OrderDetailsWithHistoryAPIView(BaseOrderDetailsWithHistoryAPIView):
     pass
 
 class PendingOrdersAPIView(BasePendingOrdersAPIView):
+    pass
+
+class RateRiderView(BaseRateRiderView):
+    pass
+
+class OrderRiderRatingView(BaseOrderRiderRatingView):
+    pass
+
+class RiderScoreView(BaseRiderScoreView):
+    pass
+
+
+class RiderScoreByOrderView(BaseRiderScoreByOrderView):
     pass

@@ -41,7 +41,7 @@ from billing.api.v1.views import (BillingProfileRetrieveUpdateDestroyAPIView,
                                  RestaurantFeeApiView, OrderUserCancelAPIView, ExportUserOrderExcelAPIView,
 
                                ExportCustomerOrders,CartValidationAPIView,UberStuckOrdersAPIView,VRInvoiceWebhookView,
-                             OrderDetailsWithHistoryAPIView,PendingOrdersAPIView)
+                             OrderDetailsWithHistoryAPIView,PendingOrdersAPIView,RateRiderView,OrderRiderRatingView,RiderScoreView,RiderScoreByOrderView)
 
 from billing.api.base.views import OrderPartialCancelAPIView,lark_ht_update
 
@@ -182,8 +182,13 @@ urlpatterns = [
    
     path("customer-orders/", ExportCustomerOrders.as_view(), name="export-customer-orders"),
     path("vr-invoice/", VRInvoiceWebhookView.as_view(), name="vr-invoice"),
-     path("orders/<int:pk>/cancel-items/", OrderPartialCancelAPIView.as_view(), name="orders-partial-cancel"),
-         path("ht/update/", lark_ht_update, name="lark-ht-update"),
+    path("orders/<int:pk>/cancel-items/", OrderPartialCancelAPIView.as_view(), name="orders-partial-cancel"),
+     
+    path("ht/update/", lark_ht_update, name="lark-ht-update"),
+    path("orders/<int:order_pk>/rate-rider/", RateRiderView.as_view(), name="rate-rider"),
+    path("orders/<int:order_pk>/rider-rating/", OrderRiderRatingView.as_view(), name="order-rider-rating"),
+    path("riders/<str:raider_id>/score/", RiderScoreView.as_view(), name="rider-score"),
+        path("orders/<int:order_pk>/rider-score/", RiderScoreByOrderView.as_view(), name="rider-score-by-order"),
 
 
 
