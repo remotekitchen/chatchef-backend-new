@@ -46,10 +46,9 @@ api_url_patterns = (
         path("design/v1/", include("dynamic_theme.api.v1.urls")),
         path("core/v1/", include("core.api.urls")),
         path("referrals/v1/", include("referral.api.v1.urls")),
-<<<<<<< HEAD
+
         path("lark/v1/", include('lark.api.v1.urls'))
-=======
->>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
+
     ]
 )
 

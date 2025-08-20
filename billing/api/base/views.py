@@ -54,11 +54,9 @@ from billing.api.base.serializers import (
     BaseTopUpSerializer, BaseTransactionsSerializer,
     BaseUberCreateQuoteSerializer, BaseVerifyOTPSerializer,
     BaseWalletSerializer, CostCalculationDeliverySerializer,BaseOrderDeliveryExpenseSerializer,
-<<<<<<< HEAD
-    DeliveryRequestSerializer, OrderReminderSerializer,BaseCartItemSerializer)
-=======
+
     DeliveryRequestSerializer, OrderReminderSerializer,BaseCartItemSerializer,PartialCancelRequestSerializer)
->>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
+
 from billing.api.v1.serializers import OrderSerializer
 from billing.clients.doordash_client import DoordashClient
 from billing.clients.paypal_client import PaypalClient
@@ -110,18 +108,15 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 import pandas as pd
-<<<<<<< HEAD
 # from marketing.utils import send_email
 import pytz
 
-=======
 from firebase.models import TokenFCM
 from firebase.utils.fcm_helper import send_push_notification
 
 # from marketing.utils import send_email
 import pytz
 from django.db import transaction
->>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 # stripe.api_key= env.str("CHATCHEF_STRIPE_SECRET_KEY")
 
 logger = get_logger()
@@ -329,8 +324,7 @@ class BaseOrderRetrieveUpdateDestroyAPIView(
     # serializer.save(**kwargs)
 
 
-<<<<<<< HEAD
-=======
+
 class OrderPartialCancelAPIView(APIView):
     """
     POST /api/billing/v1/orders/<int:pk>/cancel-items/
@@ -536,7 +530,7 @@ class OrderPartialCancelAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
->>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
+
 class BaseDailySaleListAPIView(ListAPIView):
     serializer_class = BaseDailyOrderSerializer
 
@@ -4615,9 +4609,8 @@ class BaseUberStuckOrdersAPIView(APIView):
         return Response({
             "stuck_orders": stuck_results,
             "delivered_orders": [serialize_delivered(order) for order in delivered_orders],
-<<<<<<< HEAD
-        })
-=======
+
+
         })
 
 
@@ -4745,4 +4738,4 @@ def lark_ht_update(request):
         return JsonResponse({"status": "busy", "message": "HT update already running"}, status=202)
 
     return JsonResponse({"status": "queued", "module": "HT", "started_at": timezone.now().isoformat()}, status=202)
->>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
+

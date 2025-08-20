@@ -77,12 +77,10 @@ INSTALLED_APPS = [
     'remotekitchen',
     'django_ratelimit',
     'fcm_django',
-<<<<<<< HEAD
+
      "django_extensions",
      "lark"
-=======
      "django_extensions"
->>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 
 ]
 
