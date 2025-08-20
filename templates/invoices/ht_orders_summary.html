@@ -1,0 +1,492 @@
+<!-- templates/invoices/ht_orders_summary.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Order Summary</title>
+  </head>
+  <body
+    style="font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0"
+  >
+    <div style="max-width: 1600px; margin: 0 auto; padding: 20px">
+      <div style="text-align: center; margin-bottom: 20px">
+        <h2 style="margin: 5px 0">Orders Summary</h2>
+        <hr />
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          "
+        >
+          <h2 style="color: #ffff00; font-size: 30px">Hungrytiger</h2>
+          <div>
+            <p
+              style="
+                margin: 0;
+                font-size: 14px;
+                display: flex;
+                justify-content: space-between;
+                margin-top: 4px;
+              "
+            >
+              Date: <strong>{{date}}</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 10px">
+        <p
+          style="
+            margin: 0;
+            padding: 8px 0;
+            background-color: #e0e0e0;
+            font-size: 12px;
+          "
+        >
+          <strong>Pay to:</strong>
+        </p>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+          "
+        >
+          <div>
+            <p style="margin: 8px 0; font-size: 12px">{{restaurant.name}}</p>
+            <p style="margin: 8px 0; font-size: 12px">
+              {{location.address.street_number}}
+              {{location.address.street_name}} {{location.address.city}}
+              {{location.address.zip}} {{location.address.country}}
+            </p>
+          </div>
+          <div style="text-align: right; font-size: 12px; margin: 8px 0">
+            <strong>Sub-Total Payment:</strong><br />
+            Selling Price (inclusive of tax) - Delivery Fees - Stripe Fees -
+            Service Fees to Chatchefs
+          </div>
+        </div>
+        <div style="padding: 10px 0">
+          <p
+            style="
+              margin: 0;
+              background-color: #e0e0e0;
+              font-size: 12px;
+              padding: 8px 0;
+            "
+          >
+            <strong>From:</strong>
+          </p>
+          <div style="font-size: 12px; margin-top: 6px">
+            <p style="margin: 0">Thunder Digital Kitchen Ltd</p>
+            <p style="margin-top: 6px">
+              200 - 13571 COMMERCE PKY, RICHMOND BC V6V 2R2, CANADA
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {% for orders in orders_list %}
+      <div style="overflow-x: auto">
+        <table
+          style="
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-size: 9px;
+            table-layout: fixed;
+            word-wrap: break-word;
+          "
+        >
+          <tbody>
+            <tr style="background-color: #f4f4f4; text-align: left">
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Order Date
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Order ID
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Original Item Price
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Item Price
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                BOGO Item Inflation percentage
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Discount
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Restaurant Discount
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Hungrytiger Discount
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Payment Type
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Order Mode
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Tax
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Selling Price<br />(Inclusive of tax)
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Original Delivery Fees
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Delivery Fee
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                On-Time Guarantee Fee
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Refund Amount
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Customer absorb on delivery fees
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Delivery fees expense
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Service fees to restaurant
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Commission Amount
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Service fees to Restaurant
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Service fees to hungrytiger
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Tips for restaurant
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                bag fees
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Container fees
+              </th>
+              <th
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Amount to Restaurant
+              </th>
+            </tr>
+            {% for order in orders %}
+            <tr>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.order_date }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.order_id }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.actual_item_price }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.item_price }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">0%</td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.discount }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.restaurant_discount }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.hungrytiger_discount }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">cash</td>
+              <td style="padding: 4px; border: 1px solid #ddd">delivery</td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.selling_price_inclusive_of_tax }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.original_delivery_fee }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.delivery_fee }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.otg_fee }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.refund_amount }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.delivery_fee_expense }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.commission_amount }}
+              </td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">0</td>
+              <td style="padding: 4px; border: 1px solid #ddd">
+                {{ order.amount_to_restaurant }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+
+      <div>
+        <p style="text-align: right; margin-top: 10px; font-size: 16px">
+          <strong>{{total_amount_to_restaurant}}</strong>
+        </p>
+      </div>
+
+      <div style="font-size: 12px; margin-bottom: 20px">
+        <table style="width: 100%; border-collapse: collapse">
+          <tbody>
+            <tr>
+              <td
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Date
+              </td>
+              <td
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Comment
+              </td>
+              <td
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Sales through Pay-in-Person
+              </td>
+              <td
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Sales Through Bkash
+              </td>
+              <td
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Subtotal for Total Sales
+              </td>
+              <td
+                style="
+                  padding: 8px;
+                  border: 1px solid #ddd;
+                  background-color: #e0e0e0;
+                "
+              >
+                Amount
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ddd">{{date}}</td>
+              <td style="padding: 8px; border: 1px solid #ddd">
+                Payments Deposited
+              </td>
+              <td style="padding: 8px; border: 1px solid #ddd">{{cash}}</td>
+              <td style="padding: 8px; border: 1px solid #ddd">
+                {{sales_bkash}}
+              </td>
+              <td style="padding: 8px; border: 1px solid #ddd">
+                {{total_amount_to_restaurant}}
+              </td>
+              <td style="padding: 8px; border: 1px solid #ddd">
+                {{total_amount_to_restaurant}}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>
