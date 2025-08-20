@@ -147,7 +147,7 @@ def send_push_notification(tokens, data):
             ),
             data={
                 "click_action": "https://www.hungry-tiger.com/",
-                "image_url": str(campaign_image),  # Also including in data for custom handling
+                "image_url": str(campaign_image),  
                 "badge_count": "1",
                 "campaign_category": str(campaign_category),
                 "campaign_is_active": str(campaign_is_active),
