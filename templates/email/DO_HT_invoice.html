@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoice</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        color: #222;
+      }
+      .box {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+      .muted {
+        color: #666;
+        font-size: 12px;
+      }
+      a {
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h2>Invoice{% if dataset %} ({{ dataset }}){% endif %}</h2>
+      <p><strong>{{ restaurant_name }}</strong></p>
+
+      {% if date_start and date_end %}
+      <p>Period: {{ date_start }} to {{ date_end }}</p>
+      {% endif %}
+
+      <p>The invoice PDF is attached to this email.</p>
+
+      {% if excel_url %} {% endif %}
+
+      <hr />
+      <p class="muted">{{ brand_name }}</p>
+    </div>
+  </body>
+</html>
