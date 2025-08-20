@@ -968,6 +968,7 @@ def setup_ubereats_stuck_order_check(sender, **kwargs):
 
 
 
+<<<<<<< HEAD
 
 
 from lark_automation.sync_consumer import sync_customers
@@ -991,3 +992,5 @@ def sync_all_hungry_invoices_to_lark():
     log.warning("✅ Hungry sync finished.")
 
 
+=======
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab

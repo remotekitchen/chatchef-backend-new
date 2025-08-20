@@ -19,7 +19,11 @@ from core.utils import get_logger
 
 from .utiils import check_for_order_status_and_call
 from billing.clients.raider_app import Raider_Client
+<<<<<<< HEAD
 from firebase.utils.fcm_helper import  get_dynamic_message, send_push_notification
+=======
+from firebase.utils.fcm_helper import  get_dynamic_message, send_push_notification,send_push_notification_for_order_management,send_order_push_admin
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 from firebase.models import TokenFCM
 from food.models import Restaurant
 from django.core.exceptions import ObjectDoesNotExist
@@ -454,12 +458,16 @@ def safe_create_delivery(instance):
         print(f"Delivery creation failed for Order {instance.id}: {e}")
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 @receiver(post_save, sender=Order)
 def notify_quick_login_users_on_order(sender, instance, created, **kwargs):
     if not created:
         return
 
+<<<<<<< HEAD
     quick_users = QuickLoginUser.objects.filter(
         is_active=True,
     ).exclude(fcm_token__isnull=True).exclude(fcm_token="")
@@ -483,3 +491,29 @@ def notify_quick_login_users_on_order(sender, instance, created, **kwargs):
         }
     )
 
+=======
+    quick_users = (
+        QuickLoginUser.objects
+        .filter(is_active=True)
+        .exclude(fcm_token__isnull=True)
+        .exclude(fcm_token="")
+    )
+    tokens = [u.fcm_token for u in quick_users]
+    if not tokens:
+        return
+
+    payload_data = {
+        "campaign_title": "New Order Placed",
+        "campaign_message": f"Order #{instance.id} was just placed.",
+        "campaign_image": "",  # or a valid image URL
+        "campaign_category": "orders",
+        "campaign_is_active": "true",
+        "restaurant_name": getattr(getattr(instance, "restaurant", None), "name", "Hungry Tiger"),
+        "screen": "OrderDetails",
+        "id": str(instance.id),
+        "order_id": str(instance.id),
+    }
+
+    # Send to all tokens in one go
+    send_order_push_admin(tokens, payload_data)
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab

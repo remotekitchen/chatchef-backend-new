@@ -429,4 +429,21 @@ pip-selfcheck.json
 
 
 # static files
+<<<<<<< HEAD
 static/logs/debug.log*
+=======
+static/logs/debug.log*
+path/to/*.json
+.env
+credentials/*.json
+.env
+credentials/*.json
+.env
+
+
+# Firebase keys
+.credentials/firebase_service_account.json
+hungrytiger/settings/serviceAccountKey.json
+
+
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab

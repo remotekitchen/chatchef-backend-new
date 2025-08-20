@@ -99,6 +99,10 @@ def send_push_notification(tokens, data):
     restaurant_name = data.pop("restaurant_name", "")     # Default if missing
     screen = data.pop("screen", "")     # Default if missing
     id = data.pop("id", "")     # Default if missing
+<<<<<<< HEAD
+=======
+    order_id = data.pop("order_id", "")
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 
 
 
@@ -153,6 +157,11 @@ def send_push_notification(tokens, data):
                 "restaurant_name": str(restaurant_name),
                 "screen": str(screen),
                 "id": str(id),
+<<<<<<< HEAD
+=======
+                "order_id": str(order_id),
+                "sound": 'order_sound'
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 
             },
             token=token
@@ -245,6 +254,237 @@ def send_push_notification(tokens, data):
 
 #     return results
 
+<<<<<<< HEAD
+=======
+INVALID_TOKEN_MARKERS = [
+    "invalid registration",
+    "not registered",
+    "invalid token",
+    "unregistered",
+    "expired",
+]
+
+def send_push_notification_for_order_management(tokens, data):
+    title = data.get("campaign_title", "") or data.get("title", "")
+    body = data.get("campaign_message", "") or data.get("body", "")
+    campaign_image = (data.get("campaign_image") or "").strip() or None
+    campaign_category = str(data.get("campaign_category", ""))
+    campaign_is_active = str(data.get("campaign_is_active", ""))
+    restaurant_name = str(data.get("restaurant_name", ""))
+    screen = str(data.get("screen", ""))
+    _id = str(data.get("id", ""))
+    order_id = str(data.get("order_id", ""))
+
+    results = {"successful": 0, "failed": 0, "failures": [], "invalid_tokens": []}
+
+    # (Optional) de-dup tokens
+    tokens = list(dict.fromkeys(tokens or []))
+    if not tokens:
+        return results
+
+    for token in tokens:
+        msg = messaging.Message(
+            token=token,
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+                image=campaign_image,  # shown on supported platforms
+            ),
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    channel_id="high_importance_channel",  # must exist in the app
+                    sound="order_sound",                    # raw/order_sound.(mp3|wav)
+                    priority="high",
+                    visibility="public",
+                    image=campaign_image,
+                ),
+            ),
+            apns=messaging.APNSConfig(
+                headers={"apns-priority": "10"},
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(
+                        sound="order_sound.wav",  # ensure this filename exists in your app bundle or use dict for critical sounds
+                        badge=1,
+                        mutable_content=True,    # required so iOS can download/show image
+                        alert=messaging.ApsAlert(title=title, body=body),
+                    )
+                ),
+                fcm_options=messaging.APNSFCMOptions(
+                    image=campaign_image  # iOS image
+                ),
+            ),
+            data={
+                # keep all your custom data
+                "order_id": order_id,
+                "image_url": str(campaign_image or ""),
+                "badge_count": "1",
+                "id": _id,
+                "screen": screen,
+                "click_action": "https://www.hungry-tiger.com/",
+                "campaign_category": campaign_category,
+                "campaign_is_active": campaign_is_active,
+                "restaurant_name": restaurant_name,
+                "icon": "https://www.example.com/icon.png",
+                "image": "https://www.example.com/image.jpg",
+                "badge": "https://www.example.com/badge.png",
+
+                # also mirror title/body/sound so you can build a unified object client-side
+                "title": title,
+                "body": body,
+                "sound": "order_sound",
+            },
+        )
+
+        # DEBUG: print the exact JSON payload FCM will receive
+        try:
+            # Private API but useful for debugging in dev
+            print("FCM request JSON:", messaging._message_to_json(msg))
+        except Exception:
+            pass
+
+        try:
+            resp = messaging.send(msg)
+            print(f"Notification sent to {token[:10]}...: {resp}")
+            results["successful"] += 1
+        except Exception as e:
+            err = str(e)
+            print(f"Error sending to {token[:10]}...: {err}")
+            results["failed"] += 1
+            results["failures"].append({"token": token, "error": err})
+            low = err.lower()
+            if any(marker in low for marker in INVALID_TOKEN_MARKERS):
+                results["invalid_tokens"].append(token)
+
+    # If you maintain a Token table, remove invalid ones here
+    if results["invalid_tokens"]:
+        try:
+            remove_invalid_tokens_from_database(results["invalid_tokens"])
+            print(f"Removed {len(results['invalid_tokens'])} invalid tokens.")
+        except Exception as e:
+            print("Failed to remove invalid tokens:", e)
+
+    return results
+
+
+
+FCM_LEGACY_URL = "https://fcm.googleapis.com/fcm/send"
+FCM_SERVER_KEY = "AAAAQ6Zj1xs:APA91bG3DrnPClBlnkcAYp3zVI-Anj7thbcnNHkQi8LNzzZjxHjkvWUqcaVFzuvnamJmwu24OSqpwDifr2zQy4LWEN9xzCOD6HBBlqTckLBOXmTHT9ZQdsAzxsUQM4nadt9MNuG4ZHgk"  
+
+
+def _pretty_json_for_log(token: str, title: str, body: str, image: str | None, data: dict):
+    """Exact legacy-shaped JSON for your logs only (NOT what FCM v1 accepts)."""
+    return {
+        "to": token,
+        "notification": {"title": title, "body": body, "sound": "order_sound"},
+        "android": {"notification": {
+            "channel_id": "high_importance_channel",
+            "sound": "order_sound",
+            "priority": "high",
+            "visibility": "public",
+        }},
+        "apns": {
+            "payload": {"aps": {
+                "sound": "order_sound.wav",
+                "badge": 1,
+                "alert": {"title": title, "body": body},
+                "mutable-content": 1
+            }},
+            "headers": {"apns-priority": "10"}
+        },
+        "data": data,
+        "priority": "high"
+    }
+
+def send_order_push_admin(tokens: list[str], payload: dict):
+    title = payload.get("campaign_title") or payload.get("title") or ""
+    body  = payload.get("campaign_message") or payload.get("body") or ""
+    image = (payload.get("campaign_image") or "").strip() or None
+
+    # Build the data block once so logs and the real send use the same values
+    data_block = {
+        "order_id": str(payload.get("order_id", "")),
+        "image_url": image or "",
+        "badge_count": "1",
+        "id": str(payload.get("id", "")),
+        "screen": str(payload.get("screen", "")),
+        "click_action": "https://www.hungry-tiger.com/",
+        "campaign_category": str(payload.get("campaign_category", "")),
+        "campaign_is_active": str(payload.get("campaign_is_active", "")),
+        "restaurant_name": str(payload.get("restaurant_name", "")),
+        "icon": "https://www.example.com/icon.png",
+        "image": "https://www.example.com/image.jpg",
+        "badge": "https://www.example.com/badge.png",
+        # mirror title/body/sound so the app can always reconstruct
+        "title": title, "body": body, "sound": "order_sound",
+    }
+
+    results = {"successful": 0, "failed": 0, "failures": [], "invalid_tokens": []}
+    tokens = list(dict.fromkeys(tokens or []))
+    if not tokens:
+        return results
+
+    for token in tokens:
+        # 1) Log the exact “legacy” shape you want (for visibility)
+        pretty = _pretty_json_for_log(token, title, body, image, data_block)
+        print("LOG (pretty JSON):", pretty)
+
+        # 2) Actually send using HTTP v1 via Admin SDK
+        msg = messaging.Message(
+            token=token,  # <-- NOT 'to'
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+                image=image or None,   # Optional
+            ),
+            android=messaging.AndroidConfig(
+                priority="high",       # Android priority lives here
+                notification=messaging.AndroidNotification(
+                    channel_id="high_importance_channel",
+                    sound="order_sound",     # Android sound
+                    visibility="public",
+                    image=image or None,
+                ),
+            ),
+            apns=messaging.APNSConfig(
+                headers={"apns-priority": "10"},  # iOS priority
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(
+                        sound="order_sound.wav",   # iOS sound
+                        badge=1,
+                        mutable_content=True,
+                        alert=messaging.ApsAlert(title=title, body=body),
+                    )
+                ),
+                fcm_options=messaging.APNSFCMOptions(image=image) if image else None,
+            ),
+            data=data_block,
+        )
+
+        try:
+            resp = messaging.send(msg)
+            print("FCM sent:", resp)
+            results["successful"] += 1
+        except Exception as e:
+            err = str(e)
+            print("FCM error:", err)
+            results["failed"] += 1
+            results["failures"].append({"token": token, "error": err})
+            if any(s in err.lower() for s in ["unregistered", "not registered", "invalid", "expired", "mismatch"]):
+                results["invalid_tokens"].append(token)
+
+    # Optional: clean invalid tokens in DB
+    if results["invalid_tokens"]:
+        try:
+            remove_invalid_tokens_from_database(results["invalid_tokens"])
+        except Exception:
+            pass
+
+    return results
+
+
+
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 
 def remove_invalid_tokens_from_database(invalid_tokens):
     """

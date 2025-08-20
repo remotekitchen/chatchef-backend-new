@@ -29,6 +29,31 @@ def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=
         start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
     bold_font = Font(bold=True)
 
+<<<<<<< HEAD
+=======
+    # --- helper: best-effort customer name (order → dropoff → user) ---
+    def _pick_customer_name(order):
+        name = (getattr(order, "customer", "") or "").strip()
+        if name:
+            return name
+        first = (getattr(order, "dropoff_contact_first_name", "") or "").strip()
+        last  = (getattr(order, "dropoff_contact_last_name", "") or "").strip()
+        if first or last:
+            return f"{first} {last}".strip()
+        u = getattr(order, "user", None)
+        if u:
+            try:
+                full = (u.get_full_name() or "").strip()
+            except Exception:
+                full = ""
+            if full:
+                return full
+            for cand in (getattr(u, "username", None), getattr(u, "email", None)):
+                if cand:
+                    return str(cand).strip()
+        return "Unknown Customer"
+
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
 
     # Default static values
     contract_commission_percentage = 0
@@ -298,6 +323,19 @@ def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=
             str(ht_profit),
             str(restaurant.name),
         ])
+<<<<<<< HEAD
+=======
+        
+        otg_fee = float(getattr(order, "on_time_guarantee_fee", 0) or 0)
+        if not bool(getattr(order, "on_time_guarantee_opted_in", False)):
+            otg_fee = 0.0
+        delivery_fee_val = float(getattr(order, "delivery_fee", 0) or 0)
+        refund_amount_val = float(getattr(order, "refund_amount", 0) or 0)
+        customer_name_val = _pick_customer_name(order)
+
+
+
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
             # 🌿 19) Append Order Data JSON
         order_data.append({
             'order_date': str(getattr(order, "receive_date_ht", None) or order.receive_date.date()),
@@ -341,7 +379,15 @@ def generate_excel_invoice_for_hungry(orders, restaurant, location, adjustments=
             'total_amount_to_restaurant': str(total_amount_to_restaurant),
             'subtotal': str(order.subtotal),
             'original_delivery_fee': str(order.original_delivery_fee),
+<<<<<<< HEAD
             'delivery_fee_expense':str(delivery_fee_expense)
+=======
+            'delivery_fee_expense':str(delivery_fee_expense),
+            'On-Time Guarantee Fee': str(otg_fee),
+            'Delivery Fee': str(delivery_fee_val),
+            'Refund Amount': str(refund_amount_val),
+            'Customer': customer_name_val,
+>>>>>>> 8282bd5e6cbcb8cf9d0b9db03fc6269eeea3dfab
         })
     sheet.append([])
     sheet.append([])
