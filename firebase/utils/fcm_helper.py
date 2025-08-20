@@ -140,7 +140,7 @@ def send_push_notification(tokens, data):
             ),
             webpush=messaging.WebpushConfig(
                 notification=messaging.WebpushNotification(
-                    icon="https://www.example.com/icon.png",  # Web notification icon
+                    icon="https://www.example.com/icon.png", 
                     badge="https://www.example.com/badge.png",  # Web notification badge
                     image="https://www.example.com/image.jpg"  # Web notification image
                 )
