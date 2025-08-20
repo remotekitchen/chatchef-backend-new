@@ -4614,9 +4614,9 @@ from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseForbid
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
-from billing.utilities.lark.jobrunner import ht_sync_runner
-from lark_automation.sync_ht_payout import push_all_hungry_orders_direct
-from billing.utilities.lark.lark_helpers import lark_update_fields
+from lark.utilities.jobrunner import ht_sync_runner
+from lark.lark_automation.sync_ht_payout import push_all_hungry_orders_direct
+from lark.utilities.lark_helpers import lark_update_fields
 
 # shared secret (matches Lark header)
 LARK_WEBHOOK_TOKEN = "UKqiyV4W0iHlDDNW9-352CqWmig-ZmJDy64jNIB5wxU"
