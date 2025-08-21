@@ -670,6 +670,8 @@ class SimilarHotelSerializer(serializers.ModelSerializer):
 
 
 class HotelManageSerializer(serializers.ModelSerializer):
+    hotel_images = HotelImageSerializer(many=True, read_only=True)
+    room_types = RoomTypeBaseSerializer(many=True, read_only=True)
     class Meta:
         model = Hotel
         exclude = ["created_at", "updated_at"]
