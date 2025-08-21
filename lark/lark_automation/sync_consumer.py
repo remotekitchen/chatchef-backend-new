@@ -1,12 +1,12 @@
-import os
 import json
+import time
 import dateutil.parser
 import requests
 from requests.adapters import HTTPAdapter, Retry
 
 # === CONFIG (logic unchanged) ===
 TEST_MODE = False
-DJANGO_API_URL = "http://127.0.0.1:8000/api/lark/v1/customer-orders/"
+DJANGO_API_URL = "https://api.hungrytiger.chatchefs.com/api/lark/v1/customer-orders/"
 LARK_APP_ID = "cli_a8030393dd799010"
 LARK_APP_SECRET = "8ZuSlhJWZrXCcyHHOkU3kfHF2BlPGKrY"
 
@@ -14,40 +14,42 @@ LARK_BASE_ID = "Ms7dbtQTfaew87s3OHfuRGRZsze"
 LARK_TABLE_ID = "tblrssqND91wnmdC"
 
 LARK_API_ROOT = "https://open.larksuite.com/open-apis"
-TIMEOUT = 30  # seconds
+TIMEOUT = (10, 60)  # (connect, read)
 
-# --- HTTP session with retries/backoff (no logic change to API calls) ---
-def make_session() -> requests.Session:
-    s = requests.Session()
-    retries = Retry(
-        total=5,
-        backoff_factor=0.5,
-        status_forcelist=(429, 500, 502, 503, 504),
-        allowed_methods=frozenset(["GET", "POST", "PUT", "DELETE"])
-    )
-    adapter = HTTPAdapter(max_retries=retries)
-    s.mount("https://", adapter)
-    s.mount("http://", adapter)
-    return s
-
-SESSION = make_session()
+# --- HTTP session with retries/backoff & pooling ---
+SESSION = requests.Session()
+retries = Retry(
+    total=6, connect=6, read=6,
+    backoff_factor=0.5,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset(["GET", "POST", "PUT", "DELETE"]),
+    respect_retry_after_header=True,
+)
+adapter = HTTPAdapter(max_retries=retries, pool_connections=20, pool_maxsize=50)
+SESSION.mount("https://", adapter)
+SESSION.mount("http://", adapter)
 
 
-def get_lark_token() -> str:
+def _request(method, url, **kw):
+    kw.setdefault("timeout", TIMEOUT)
+    # a tiny extra retry against transient TLS/connection hiccups
+    for i in range(2):
+        try:
+            return SESSION.request(method, url, **kw)
+        except requests.RequestException:
+            time.sleep(0.6 * (i + 1))
+    return SESSION.request(method, url, **kw)
+
+
+def get_lark_token():
     url = f"{LARK_API_ROOT}/auth/v3/tenant_access_token/internal/"
-    res = SESSION.post(
-        url,
-        json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET},
-        timeout=TIMEOUT,
-    )
+    res = _request("POST", url, json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET})
     res.raise_for_status()
     print("🔐 Lark token obtained")
-    data = res.json()
-    return data.get("tenant_access_token")
+    return res.json().get("tenant_access_token")
 
 
-def clean_fields(customer: dict) -> dict:
-    # --- keep original behavior exactly ---
+def clean_fields(customer):
     def safe_int(val):
         try:
             return int(val)
@@ -83,64 +85,57 @@ def clean_fields(customer: dict) -> dict:
     }
 
 
-def fetch_api_customers() -> list:
-    res = SESSION.get(DJANGO_API_URL, timeout=TIMEOUT)
+def fetch_api_customers():
+    res = _request("GET", DJANGO_API_URL)
     res.raise_for_status()
     return res.json()
 
 
-def bitable_records_url(base_id: str, table_id: str) -> str:
-    return f"{LARK_API_ROOT}/bitable/v1/apps/{base_id}/tables/{table_id}/records"
+def _bitable_records_url():
+    return f"{LARK_API_ROOT}/bitable/v1/apps/{LARK_BASE_ID}/tables/{LARK_TABLE_ID}/records"
 
 
-def fetch_lark_records(token: str):
-    """Fetch all records and return (phone_to_record, duplicates) as in original code."""
-    url = bitable_records_url(LARK_BASE_ID, LARK_TABLE_ID)
+def fetch_lark_records(token):
+    url = _bitable_records_url()
     headers = {"Authorization": f"Bearer {token}"}
-    params = {"page_size": 100}
+    params = {"page_size": 500}
     all_records = []
+    page_token = None
 
     while True:
-        res = SESSION.get(url, headers=headers, params=params, timeout=TIMEOUT)
+        if page_token:
+            params["page_token"] = page_token
+        res = _request("GET", url, headers=headers, params=params)
         res.raise_for_status()
-        data = res.json()
-        items = data.get("data", {}).get("items", []) or []
+        data = res.json().get("data", {})
+        items = data.get("items") or []
         all_records.extend(items)
-        page_token = data.get("data", {}).get("page_token")
-        if not page_token:
+        if not data.get("has_more"):
             break
-        params["page_token"] = page_token
+        page_token = data.get("page_token")
 
     phone_to_record = {}
     duplicates = []
 
     for rec in all_records:
-        fields = rec.get("fields", {})
+        fields = rec.get("fields", {}) or {}
         phone_val = fields.get("Phone")
         if not phone_val or phone_val in ["None", None, ""]:
             continue
         try:
             phone_key = int(str(phone_val).replace("+", "").replace(" ", "").strip())
             if phone_key in phone_to_record:
-                duplicates.append(rec["record_id"])
+                duplicates.append(rec.get("record_id"))
             else:
                 phone_to_record[phone_key] = rec
-        except:
+        except Exception:
             continue
 
-    return phone_to_record, duplicates
+    return phone_to_record, [d for d in duplicates if d]
 
 
-def format_field_diff(existing_fields: dict, changed_fields: dict) -> str:
-    diffs = []
-    for k, new_val in changed_fields.items():
-        old_val = existing_fields.get(k, "<missing>")
-        diffs.append(f"- {k}:\n    before → {json.dumps(old_val)}\n    after  → {json.dumps(new_val)}")
-    return "\n".join(diffs)
-
-
-def fields_diff(existing_fields: dict, new_fields: dict) -> dict:
-    """Keep exact compare semantics: stringified + strip."""
+def _diff(existing_fields, new_fields):
+    # keep your exact compare semantics: stringified + strip
     changed = {}
     for k, v in new_fields.items():
         if str(existing_fields.get(k, "")).strip() != str(v).strip():
@@ -148,59 +143,60 @@ def fields_diff(existing_fields: dict, new_fields: dict) -> dict:
     return changed
 
 
+def _format_field_diff(existing_fields, changed_fields):
+    diffs = []
+    for k, new_val in changed_fields.items():
+        old_val = existing_fields.get(k, "<missing>")
+        diffs.append(f"- {k}:\n    before → {json.dumps(old_val)}\n    after  → {json.dumps(new_val)}")
+    return "\n".join(diffs)
+
+
 def sync_customers():
     token = get_lark_token()
     phone_to_record, duplicates = fetch_lark_records(token)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Delete duplicates (same behavior, but with error checks)
+    # delete duplicates (same logic, but safer logs)
     for dup_id in duplicates:
-        del_url = f"{bitable_records_url(LARK_BASE_ID, LARK_TABLE_ID)}/{dup_id}"
-        try:
-            res = SESSION.delete(del_url, headers=headers, timeout=TIMEOUT)
-            if res.status_code not in (200, 204):
-                print(f"[WARN] Duplicate delete failed {dup_id}: {res.status_code} → {res.text}")
-        except requests.RequestException as e:
-            print(f"[WARN] Duplicate delete error {dup_id}: {e}")
+        del_url = f"{_bitable_records_url()}/{dup_id}"
+        res = _request("DELETE", del_url, headers=headers)
+        if res.status_code not in (200, 204):
+            print(f"[WARN] Duplicate delete failed {dup_id}: {res.status_code} → {res.text}")
 
-    # Rebuild map after deletions (same behavior)
+    # rebuild after deletes
     phone_to_record, _ = fetch_lark_records(token)
 
-    # Fetch customers
     customers = fetch_api_customers()
     if TEST_MODE:
         customers = customers[:10]
 
-    base_url = bitable_records_url(LARK_BASE_ID, LARK_TABLE_ID)
+    base_url = _bitable_records_url()
 
     for customer in customers:
         fields = clean_fields(customer)
         phone = fields.get("Phone")
-        full_name = fields.get("Full Name", "")
-        print(f"\n Syncing: {full_name} | {phone}")
+        print(f"\n Syncing: {fields['Full Name']} | {phone}")
 
         record = phone_to_record.get(phone)
         if record:
             record_id = record.get("record_id")
             existing_fields = record.get("fields", {}) or {}
-            changed_fields = fields_diff(existing_fields, fields)
+            changed_fields = _diff(existing_fields, fields)
 
             if not changed_fields:
                 print("[SUCCESS] No changes — record up-to-date.")
                 continue
 
-            print(f"[SUCCESS] Updating fields:\n{format_field_diff(existing_fields, changed_fields)}")
-
+            print(f"[SUCCESS] Updating fields:\n{_format_field_diff(existing_fields, changed_fields)}")
             put_url = f"{base_url}/{record_id}"
-            res = SESSION.put(put_url, headers=headers, json={"fields": changed_fields}, timeout=TIMEOUT)
+            res = _request("PUT", put_url, headers=headers, json={"fields": changed_fields})
             if res.status_code in (200, 201):
                 print("[SUCCESS] Successfully updated.")
             else:
                 print(f"[ERROR] Update failed: {res.status_code} → {res.text}")
 
         else:
-            # Create
-            res = SESSION.post(base_url, headers=headers, json={"fields": fields}, timeout=TIMEOUT)
+            res = _request("POST", base_url, headers=headers, json={"fields": fields})
             if res.status_code in (200, 201):
                 print(f"[SUCCESS] Created record: {phone}")
             else:

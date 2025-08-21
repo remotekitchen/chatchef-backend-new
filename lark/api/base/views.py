@@ -944,40 +944,28 @@ def send_invoice_pdf(request):
 
 
 
-
 class BaseExportCustomerOrders(APIView):
     """
     API that returns customer order data for syncing to Lark Base.
-    Optimized with annotations and deduplicated by phone number.
+    Includes ALL users whose phone starts with +880 (no dedup by phone).
     """
 
     def get(self, request):
         completed_order_filter = Q(order__status=Order.StatusChoices.COMPLETED)
 
-        # Filter and deduplicate users by phone number
-        users = User.objects.filter(
-            phone__isnull=False,
-            phone__startswith="+880"
-        ).order_by('phone', 'id')  # Ensure deterministic selection
-
-        # Deduplicate by phone
-        seen_phones = set()
-        unique_users = []
-
-        for user in users:
-            if user.phone not in seen_phones:
-                seen_phones.add(user.phone)
-                unique_users.append(user)
-
-        # Annotate after filtering
-        annotated_users = User.objects.filter(id__in=[u.id for u in unique_users]).annotate(
-            first_order=Min('order__receive_date', filter=completed_order_filter),
-            last_order=Max('order__receive_date', filter=completed_order_filter),
-            total_orders=Count('order', filter=completed_order_filter)
+        users_qs = (
+            User.objects
+            .filter(phone__isnull=False, phone__startswith="+880")
+            .annotate(
+                first_order=Min('order__receive_date', filter=completed_order_filter),
+                last_order=Max('order__receive_date', filter=completed_order_filter),
+                total_orders=Count('order', filter=completed_order_filter),
+            )
+            .order_by('phone', 'id')  # keep deterministic ordering if you want
         )
 
         data = []
-        for user in annotated_users:
+        for user in users_qs:
             data.append({
                 "phone": user.phone or "",
                 "email": user.email,
@@ -985,7 +973,7 @@ class BaseExportCustomerOrders(APIView):
                 "date_joined": user.date_joined.isoformat() if user.date_joined else "",
                 "first_order_date": user.first_order.strftime("%Y-%m-%d") if user.first_order else "",
                 "last_order_date": user.last_order.strftime("%Y-%m-%d") if user.last_order else "",
-                "total_orders": user.total_orders
+                "total_orders": user.total_orders,
             })
 
         return Response(data)
