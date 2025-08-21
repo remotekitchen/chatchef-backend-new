@@ -16,16 +16,15 @@ import requests
 from requests.adapters import HTTPAdapter, Retry
 
 from django.utils import timezone
+from rest_framework.views import APIView
 
+from billing.models import Order
+from accounts.models import User
+from rest_framework.response import Response
+from django.db.models import CharField, F, Q, Sum,Min, Max, Count
 from lark.utilities.jobrunner import ht_sync_runner
 from lark.utilities.invoice_exporter_do import generate_invoice_files_do
 from lark.utilities.invoice_exporter_ht import generate_invoice_files_ht
-
-
-
-# billing/views_ht_update.py
-
-import json
 import traceback
 import requests  # needed for get_lark_token
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseForbidden
@@ -35,6 +34,8 @@ from django.utils import timezone
 from lark.utilities.jobrunner import ht_sync_runner
 from lark.lark_automation.sync_ht_payout import push_all_hungry_orders_direct
 from lark.lark_automation.sync_DO_calculation import push_all_DO_invoices_to_lark
+from lark.lark_automation.sync_consumer import sync_customers
+
 from lark.utilities.lark_helpers import lark_update_fields
 
 # shared secret (matches Lark header)
@@ -202,6 +203,59 @@ def lark_DO_update(request):
 
     return JsonResponse({"status": "queued", "module": "DO", "started_at": timezone.now().isoformat()}, status=202)
 
+
+LARK_CONSUMER_BASE_ID = "Ms7dbtQTfaew87s3OHfuRGRZsze"
+
+LARK_CONSUMER_TABLE_ID = "tblrssqND91wnmdC"
+
+@csrf_exempt
+def consumer_update(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST required")
+    if request.headers.get("X-Lark-Token") != LARK_WEBHOOK_TOKEN:
+        return HttpResponseForbidden("Invalid token")
+
+    try:
+        body = json.loads(request.body or "{}")
+    except Exception:
+        return HttpResponseBadRequest("Invalid JSON")
+
+    control_record_id = body.get("control_record_id")
+    if not control_record_id:
+        return HttpResponseBadRequest("Missing control_record_id")
+
+    token = get_lark_token()
+
+    # Pull valid options for the SingleSelect "status" FROM THE DO CONTROL TABLE
+    field_info = get_field_definitions_for(LARK_CONSUMER_BASE_ID, LARK_CONSUMER_TABLE_ID, token=token)
+    status_field = resolve_field_name_ci(field_info, "status")
+    running = choose_select_option(field_info, status_field, "Running")
+
+    # Set status: Running (on DO control table)
+    try:
+        lark_update_fields(LARK_CONSUMER_BASE_ID, LARK_CONSUMER_TABLE_ID, control_record_id, token, {status_field: running})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Failed to set Running: {e}"}, status=500)
+
+    # Background job flips to Done/Failed using the consumer table/field
+    def job():
+        try:
+            sync_customers()
+            done = choose_select_option(field_info, status_field, "Done")
+            lark_update_fields(LARK_CONSUMER_BASE_ID, LARK_CONSUMER_TABLE_ID, control_record_id, token, {status_field: done})
+        except Exception:
+            traceback.print_exc()
+            failed = choose_select_option(field_info, status_field, "Failed")
+            try:
+                lark_update_fields(LARK_CONSUMER_BASE_ID, LARK_CONSUMER_TABLE_ID, control_record_id, token, {status_field: failed})
+            except Exception:
+                pass
+
+    started = ht_sync_runner.start(target=job)
+    if not started:
+        return JsonResponse({"status": "busy", "message": "Consumer update already running"}, status=202)
+
+    return JsonResponse({"status": "queued", "module": "Consumer", "started_at": timezone.now().isoformat()}, status=202)
 
 
 # ===== CONFIG =====
@@ -885,3 +939,41 @@ def send_invoice_pdf(request):
     if not emailed:
         return JsonResponse({"ok": False, "sent": False, "to": to_emails, "status_code": status_code}, status=500)
     return JsonResponse({"ok": True, "sent": True, "to": to_emails, "status_code": status_code})
+
+
+
+
+
+class BaseExportCustomerOrders(APIView):
+    """
+    API that returns customer order data for syncing to Lark Base.
+    Includes ALL users whose phone starts with +880 (no dedup by phone).
+    """
+
+    def get(self, request):
+        completed_order_filter = Q(order__status=Order.StatusChoices.COMPLETED)
+
+        users_qs = (
+            User.objects
+            .filter(phone__isnull=False, phone__startswith="+880")
+            .annotate(
+                first_order=Min('order__receive_date', filter=completed_order_filter),
+                last_order=Max('order__receive_date', filter=completed_order_filter),
+                total_orders=Count('order', filter=completed_order_filter),
+            )
+            .order_by('phone', 'id')  # keep deterministic ordering if you want
+        )
+
+        data = []
+        for user in users_qs:
+            data.append({
+                "phone": user.phone or "",
+                "email": user.email,
+                "full_name": user.get_full_name(),
+                "date_joined": user.date_joined.isoformat() if user.date_joined else "",
+                "first_order_date": user.first_order.strftime("%Y-%m-%d") if user.first_order else "",
+                "last_order_date": user.last_order.strftime("%Y-%m-%d") if user.last_order else "",
+                "total_orders": user.total_orders,
+            })
+
+        return Response(data)
