@@ -838,6 +838,8 @@ def _download_pdf_by_url(tok: str, url_or_token: str) -> tuple[bytes, str]:
     return r.content, name
 
 # ---------- Main endpoint ----------
+
+
 @csrf_exempt
 def send_invoice_pdf(request):
     """
@@ -889,32 +891,47 @@ def send_invoice_pdf(request):
     dataset = "HT" if up == "HT" else ("DO" if up in {"VR","DR","BM","DO","DOORDASH"} else up or "")
 
     start_raw = _first_field(f, CF_DATE_START); end_raw = _first_field(f, CF_DATE_END)
-    date_start = _lark_ms_to_nominal_date(int(start_raw)).isoformat() if start_raw else ""
-    date_end   = _lark_ms_to_nominal_date(int(end_raw)).isoformat() if end_raw else ""
+    # date_start = _lark_ms_to_nominal_date(int(start_raw)).isoformat() if start_raw else ""
+    # date_end   = _lark_ms_to_nominal_date(int(end_raw)).isoformat() if end_raw else ""
+    ds = _lark_ms_to_nominal_date(int(start_raw)) if start_raw else None
+    de = _lark_ms_to_nominal_date(int(end_raw))   if end_raw else None
 
-    # (Optional) Excel URL if you want it in the email body
-    excel_url = _get_textish(f, CF_INVOICE_EXCEL_TEXT)
+    def _format_period(d1, d2) -> str:
+        if not d1 or not d2:
+            return ""
+        if d2 < d1:
+            d1, d2 = d2, d1
+        # Same year (covers same/different months in that year)
+        if d1.year == d2.year:
+            return f"{d1.day} {d1.strftime('%B')} - {d2.day} {d2.strftime('%B')}, {d2.year}"
+        # Cross-year
+        return f"{d1.day} {d1.strftime('%b')}, {d1.year} - {d2.day} {d2.strftime('%b')}, {d2.year}"
 
-    subject = "Invoice"
-    if dataset: subject += f" ({dataset})"
-    if rname:   subject += f" — {rname}"
-    if date_start and date_end: subject += f" — {date_start} → {date_end}"
+    period_text = _format_period(ds, de)
+
+    # Subject exactly like the screenshot
+    subject = f"Payout Summary {period_text}" if period_text else "Payout Summary"
+    if rname:
+        subject += f" — {rname}"
+
+    # Build a human-friendly "sent at" string in your local TZ (no double conversion)
+    # --- Force Bangladesh time (UTC+06:00), independent of settings ---
+    from datetime import datetime, timezone as dt_tz, timedelta
+
+    bd_now = datetime.now(dt_tz.utc).astimezone(dt_tz(timedelta(hours=6)))
+    sent_at_text = bd_now.strftime("%B %d, %Y %I:%M %p")
 
     context = {
         "brand_name": "Thunder Digital Kitchen Ltd",
         "restaurant_name": rname,
         "dataset": dataset,
-        "date_start": date_start,
-        "date_end": date_end,
-        "record_id": rec_id,
-        "excel_url": excel_url,
+        "period_text": period_text,
         "pdf_filename": pdf_name,
+         "sent_at_text": sent_at_text,
     }
 
     # From address
-    from_addr = getattr(settings, "DEFAULT_HUNGRY_TIGER_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", None))
-    if not from_addr:
-        return HttpResponseBadRequest("DEFAULT_HUNGRY_TIGER_EMAIL/DEFAULT_FROM_EMAIL not configured.")
+    from_addr = "hungrytiger@chatchefs.com"
 
     # Fire email
     status_code = send_email(
