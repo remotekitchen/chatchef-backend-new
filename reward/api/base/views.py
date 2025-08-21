@@ -2,7 +2,8 @@ from django.db.models import Q
 from decimal import Decimal
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.exceptions import ParseError
+from rest_framework.exceptions import (NotFound, ParseError,
+                                       )
 from rest_framework.generics import (CreateAPIView, ListAPIView,
                                      ListCreateAPIView,
                                      RetrieveUpdateDestroyAPIView,
@@ -29,8 +30,11 @@ from reward.api.base.serializers import (BaseRewardGroupSerializer,
                                          BaseUserRewardSerializer,BaseCampaignSerializer,BaseTaskSerializer,BaseRewardRedemptionSerializer)
 from reward.api.v1.serializers import UserRewardSerializer, LocalDealSerializer
 from reward.models import (Reward, RewardGroup, RewardLevel, RewardManage,
-                           UserReward, LocalDeal,Campaign,Task, Cut, RewardRedemption)
+                           UserReward, LocalDeal,Campaign,Task, Cut, RewardRedemption,Spin,CoinWallet,CoinTransactionLog,LuckyReferral,LuckyInviteCodes,CampaignProgressLog)
 from referral.models import InviteCodes,Referral
+from reward.utils.event import log_user_event
+from firebase.utils.fcm_helper import send_push_notification
+
 from remotekitchen.api.base.serializers import RemoteKitchenRestaurantSerializer
 from math import radians, cos, sin, asin, sqrt
 from datetime import datetime, timedelta
@@ -46,6 +50,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from marketing.email_sender import send_email
 
+from django.db.models import Sum
 
 import random
 import string
@@ -685,33 +690,130 @@ class BaseIssueRewardAPIView(APIView):
         
 
 
+# lucky spin campaign
 
-# lucky spin campaign
-# lucky spin campaign
 
 class BaseCampaignViewSet(viewsets.ModelViewSet):
     queryset = Campaign.objects.all().order_by('-created_at')
     serializer_class = BaseCampaignSerializer
 
+    @action(detail=True, methods=["patch"])
+    def config(self, request, pk=None):
+        campaign = self.get_object()
+        fields = [
+            "reward_amount", "target_cac", "completion_rate_base",
+            "cut_decay_alpha", "cut_decay_beta", "drop_items",
+            "drop_cycle", "item_thresholds", "exchange_rates",
+        ]
+        updated = False
 
-# views/task_views.py
+        for field in fields:
+            if field in request.data:
+                setattr(campaign, field, request.data[field])
+                updated = True
+
+        if updated:
+            campaign.save()
+            return Response({"message": "Campaign config updated."})
+        return Response({"message": "No valid fields provided."}, status=400)
+    
+    @action(detail=True, methods=["get"])
+    def cac(self, request, pk=None):
+        campaign = self.get_object()
+        
+        total_rewards = RewardRedemption.objects.filter(task__campaign=campaign).aggregate(
+            total=Sum('reward_value')
+        )['total'] or 0
+
+        total_completed = Task.objects.filter(campaign=campaign, is_completed=True).count()
+        new_users = LuckyReferral.objects.filter(restaurant__campaign=campaign).annotate(
+            count=Count('joined_users')
+        ).aggregate(total=Sum('count'))['total'] or 0
+
+        if new_users == 0:
+            return Response({"cac": None, "message": "No new users yet"})
+
+        completion_rate = total_completed / Task.objects.filter(campaign=campaign).count()
+        cac_value = (total_rewards * completion_rate) / new_users
+
+        return Response({
+            "cac": round(cac_value, 2),
+            "rewards_paid": total_rewards,
+            "completion_rate": round(completion_rate, 2),
+            "new_users": new_users
+        })
+
+
+import secrets
+
+CAMPAIGN_BOOST_CONFIG = {
+    "campaign_1": [
+        (900_000, 0.09),
+        (1_100_000, 0.11),
+        (25_000, 0.0025),
+        (10_000, 0.002),
+        (5_000, 0.001),
+        (2_500, 0.0005),
+        (1_500, 0.0003),
+    ]
+}
+
+
+def apply_campaign_boost(self, task, config):
+        total_coins = 0
+        progress_before = Decimal(task.task_progress_fake)
+
+        for coins, progress in config:
+            total_coins += coins
+            task.task_progress_fake = Decimal(task.task_progress_fake) + Decimal(progress)
+            if task.task_progress_fake >= Decimal("0.9998"):
+                task.task_progress_fake = Decimal("0.9998")
+                break
+
+        task.stage = 1
+        task.save()
+
+        CampaignProgressLog.objects.create(
+            task=task,
+            coin_amount=total_coins,
+            progress_before=progress_before,
+            progress_after=task.task_progress_fake,
+            source="system"
+        )
+
+        return total_coins, float(task.task_progress_fake)
+
+
+
+def generate_branch_link(code):
+    # branch_key = "key_live_xxx"  # Your Branch.io live key
+    # headers = {"Content-Type": "application/json"}
+
+    # data = {
+    #     "branch_key": branch_key,
+    #     "channel": "referral",
+    #     "feature": "invite",
+    #     "campaign": "lucky_spin",
+    #     "data": {
+    #         "$canonical_url": f"https://www.hungry-tiger.com/spin?invite={code}",
+    #         "invite_code": code,
+    #         "$deeplink_path": f"spin",
+    #         "$android_deeplink_path": f"spin",
+    #         "$ios_deeplink_path": f"spin",
+    #         "$desktop_url": f"https://www.hungry-tiger.com/spin?invite={code}"
+    #     }
+    # }
+
+    # response = requests.post("https://api2.branch.io/v1/url", headers=headers, json=data)
+    # return response.json().get("url", f"https://www.hungry-tiger.com/spin?invite={code}")
+    return f"https://www.hungry-tiger.com/spin?invite={code}"
+
 
 
 class BaseTaskViewSet(viewsets.ModelViewSet):
     queryset = Task.objects.all()
     serializer_class = BaseTaskSerializer
-
-    @action(detail=True, methods=['post'])
-    def cut(self, request, pk=None):
-        task = self.get_object()
-        result = perform_cut(task, request.user, request.data)
-        return Response(result)
-
-    @action(detail=True, methods=['post'])
-    def redeem(self, request, pk=None):
-        task = self.get_object()
-        result, status_code = redeem_reward(task, request.user)
-        return Response(result, status=status_code)
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'])
     def start(self, request):
@@ -724,177 +826,860 @@ class BaseTaskViewSet(viewsets.ModelViewSet):
         except Campaign.DoesNotExist:
             return Response({"detail": "Invalid campaign"}, status=400)
 
+        existing_task = Task.objects.filter(user=user, campaign=campaign, is_completed=False).first()
+        if existing_task:
+            return Response(BaseTaskSerializer(existing_task).data, status=200)
+
         task = Task.objects.create(
             user=user,
             campaign=campaign,
-            current_drop_item=campaign.drop_items[0]
+            current_drop_item=campaign.drop_items[0] if campaign.drop_items else None
         )
 
+        # Welcome Bonus
+        wallet, _ = CoinWallet.objects.get_or_create(user=user, campaign=campaign)
+
+        welcome_bonus_given = CoinTransactionLog.objects.filter(user=user, source="welcome_bonus").exists()
+        if not welcome_bonus_given:
+            wallet.coins += 50
+            wallet.save()
+            CoinTransactionLog.objects.create(
+                user=user,
+                amount=50,
+                balance_after=wallet.coins,
+                source="welcome_bonus",
+                description="Welcome bonus for first-time Lucky Spin"
+            )
+
+        log_user_event(user=user, event_name="spin_install")
+
+        # Referral Logic
         if invite_code:
             try:
-                invite = InviteCodes.objects.get(code=invite_code, status="pending")
+                invite = LuckyInviteCodes.objects.get(code=invite_code, status="pending")
+                inviter = invite.refer.user
+
+                if inviter == user:
+                    return Response({"detail": "You cannot invite yourself."}, status=400)
+
+                if user in invite.refer.invited_users.all():
+                    return Response({"detail": "You have already used this invite code."}, status=400)
+
                 invite.status = "accepted"
                 invite.save()
                 invite.refer.invited_users.add(user)
                 invite.refer.joined_users.add(user)
 
-                # Notify inviter
-                inviter = invite.refer.user
-                context = {
-                    "user": inviter,
-                    "friend_name": user.first_name,
-                }
                 send_mail(
-                    "Your friend joined!",
-                    f"🎉 {user.first_name} joined your Lucky Spin! You're closer to a reward!",
-                    settings.DEFAULT_HUNGRY_TIGER_EMAIL,
-                    [inviter.email]
+                    subject="Your friend joined!",
+                    message=f"🎉 {user.first_name} joined your Lucky Spin! You're closer to a reward of {campaign.reward_amount}৳!",
+                    from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL,
+                    recipient_list=[inviter.email],
                 )
-                send_push_notification(inviter, {
-                    "title": "🎉 Friend Joined",
-                    "message": f"{user.first_name} joined your Lucky Spin! You're closer to a reward!",
-                    "screen": "lucky_spin"
-                })
-            except InviteCodes.DoesNotExist:
-                pass
 
-        return Response(BaseTaskSerializer(task).data)
+                tokens = list(TokenFCM.objects.filter(user=inviter).values_list("token", flat=True))
+                if tokens:
+                    push_data = {
+                        "campaign_title": "🎉 Friend Joined!",
+                        "campaign_message": f"{user.first_name} joined your Lucky Spin! You're closer to a reward of {campaign.reward_amount}৳!",
+                        "screen": "lucky_spin",
+                        "type": "referral_joined",
+                        "id": user.id,
+                    }
+                    send_push_notification(tokens, push_data)
+
+                inviter_task = Task.objects.filter(user=inviter, campaign=campaign).first()
+                if inviter_task and not inviter_task.is_completed:
+                    perform_cut(inviter_task, user, {"is_new_user": True})
+
+                log_user_event(user=user, event_name="spin_invite_clicked", metadata={"invite_code": invite_code})
+                log_user_event(user=inviter, event_name="referral_signup", metadata={"invited_user": user.id})
+
+            except LuckyInviteCodes.DoesNotExist:
+                return Response({"detail": "Invalid invite code."}, status=400)
+
+        # ✅ Apply Boost Automatically (Campaign 1 logic)
+        campaign_key = "campaign_1"
+        boost_config = CAMPAIGN_BOOST_CONFIG.get(campaign_key)
+
+        total_coins, new_progress = 0, 0
+        if boost_config:
+            from decimal import Decimal
+            progress_before = Decimal(task.task_progress_fake)
+
+            for coins, progress in boost_config:
+                total_coins += coins
+                task.task_progress_fake += Decimal(progress)
+                if task.task_progress_fake >= Decimal("0.9998"):
+                    task.task_progress_fake = Decimal("0.9998")
+                    break
+
+            task.is_boosted = True
+            task.stage = 1
+            task.save()
+
+            CampaignProgressLog.objects.create(
+                task=task,
+                coin_amount=total_coins,
+                progress_before=progress_before,
+                progress_after=task.task_progress_fake,
+                source="system"
+            )
+
+            log_user_event(user, "boost_started", {
+                "task_id": task.id,
+                "coin_total": total_coins
+            })
+
+        # Response
+        response_data = BaseTaskSerializer(task).data
+        response_data.update({
+            "real_wallet_coins": wallet.coins,
+            "welcome_bonus": 50 if not welcome_bonus_given else 0,
+            "is_boosted": task.is_boosted,
+            "stage": task.stage,
+            "fake_progress_added": round(float(task.task_progress_fake - progress_before), 4),
+            "fake_progress_total": round(float(task.task_progress_fake), 4),
+            "fake_coins_simulated": total_coins,
+            "next_stage_available": float(task.task_progress_fake) >= 0.9998,
+            "ui_message": (
+                f"🎉 Boost applied with {total_coins:,} fake coins! "
+                f"Your progress is now {round(float(task.task_progress_fake * 100), 2)}%.\n"
+                f"🎁 You've also received {wallet.coins} real coins to spin and win!"
+            )
+        })
+
+
+        return Response(response_data, status=201)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def update_progress(self, request, pk=None):
+        task = self.get_task(pk)
+
+        if Decimal(task.task_progress_fake) >= Decimal("0.9998"):
+            return Response({"detail": "Progress already at max"}, status=400)
+
+        config = CAMPAIGN_BOOST_CONFIG["campaign_1"]
+
+        used_steps = set(
+            CampaignProgressLog.objects.filter(
+                task=task,
+                source="system-fake-step"
+            ).values_list("coin_amount", "progress_after")
+        )
+
+        coins, progress = None, None
+
+        for c, p in config:
+            next_progress = Decimal(task.task_progress_fake) + Decimal(p)
+            if (c, float(next_progress)) not in used_steps and next_progress <= Decimal("0.9998"):
+                coins, progress = c, p
+                break
+
+        if not progress:
+            if Decimal(task.task_progress_fake) >= Decimal("0.9996"):
+                progress_before = Decimal(task.task_progress_fake)
+                task.task_progress_fake = Decimal("0.9998")
+                task.save(update_fields=["task_progress_fake"])
+
+                CampaignProgressLog.objects.create(
+                    task=task,
+                    coin_amount=0,
+                    progress_before=progress_before,
+                    progress_after=task.task_progress_fake,
+                    source="system-fake-step"
+                )
+
+                return Response({
+                    "progress_before": round(float(progress_before), 6),
+                    "progress_after": 0.9998,
+                    "coins_simulated": 0,
+                    "message": "🎯 Boost complete! Progress is now 99.98%",
+                    "next_stage_available": True
+                })
+
+            return Response({"detail": "No valid progress step found"}, status=400)
+
+        # Valid step found — apply it
+        progress_before = Decimal(task.task_progress_fake)
+        task.task_progress_fake = min(Decimal("0.9998"), progress_before + Decimal(progress))
+        task.save(update_fields=["task_progress_fake"])
+
+        CampaignProgressLog.objects.create(
+            task=task,
+            coin_amount=coins,
+            progress_before=progress_before,
+            progress_after=task.task_progress_fake,
+            source="system-fake-step"
+        )
+
+        return Response({
+            "progress_before": round(float(progress_before), 6),
+            "progress_added": round(float(Decimal(progress)), 6),
+            "progress_after": round(float(task.task_progress_fake), 6),
+            "coins_simulated": coins,
+            "next_stage_available": float(task.task_progress_fake) >= 0.9998,
+            "ui_message": (
+                f"✨ {coins:,} fake coins added! Progress increased by "
+                f"{round(float(progress) * 100, 2)}% to "
+                f"{round(float(task.task_progress_fake * 100), 2)}%"
+            )
+        })
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def next_stage_trigger(self, request, pk=None):
+        task = self.get_task(pk)
+
+        if Decimal(task.task_progress_fake) < Decimal("0.9998"):
+            return Response({"detail": "Progress not yet eligible for next stage."}, status=400)
+
+        if task.stage >= 2:
+            return Response({"detail": "Already in Stage 2 or beyond."}, status=400)
+
+        task.stage = 2
+        task.save()
+
+        log_user_event(task.user, "stage_2_unlocked", {
+            "task_id": task.id,
+            "progress": float(task.task_progress_fake)
+        })
+
+        return Response({
+            "message": "Stage 2 unlocked",
+            "new_stage": task.stage
+        })
+
+
+    @action(detail=False, methods=['post'])
+    def spin(self, request):
+        user = request.user
+        campaign_id = request.data.get("campaign_id")
+
+        if not campaign_id:
+            return Response({"detail": "campaign_id is required"}, status=400)
+
+        try:
+            campaign = Campaign.objects.get(id=campaign_id, is_active=True)
+        except Campaign.DoesNotExist:
+            return Response({"detail": "Invalid or inactive campaign"}, status=400)
+
+        wallet, _ = CoinWallet.objects.get_or_create(user=user, campaign=campaign)
+
+        task = Task.objects.filter(user=user, campaign=campaign).first()
+        if not task or task.stage < 2:
+            return Response({"detail": "You must unlock Stage 2 before spinning."}, status=400)
+
+        SPIN_COST = 5
+        before_balance = wallet.coins
+
+        if wallet.coins < SPIN_COST:
+            return Response({"detail": "Not enough coins to spin"}, status=400)
+
+        # Daily limit per campaign
+        today = timezone.now().date()
+        today_spin_count = Spin.objects.filter(user=user, campaign=campaign, created_at__date=today).count()
+        if today_spin_count >= 30:
+            return Response({"detail": "You’ve reached today’s spin limit."}, status=400)
+
+        # Weighted reward
+        REWARD_DISTRIBUTION = [
+            (2, 0.30),
+            (3, 0.25),
+            (5, 0.20),
+            (7, 0.10),
+            (10, 0.08),
+            (15, 0.05),
+            (20, 0.02),
+        ]
+        def weighted_random_choice(choices):
+            values, weights = zip(*choices)
+            return random.choices(values, weights=weights, k=1)[0]
+
+        earned = weighted_random_choice(REWARD_DISTRIBUTION)
+
+        # Jackpot
+        is_jackpot = False
+        if random.random() < 0.01:
+            earned = 50
+            is_jackpot = True
+            tokens = TokenFCM.objects.filter(user=user).values_list("token", flat=True)
+            if tokens:
+                push_data = {
+                    "campaign_title": "🎉 Jackpot!",
+                    "campaign_message": "You hit the 50-coin jackpot!",
+                    "screen": "lucky_spin",
+                    "type": "jackpot",
+                    "id": user.id,
+                }
+                send_push_notification(tokens, push_data)
+
+        # Double card
+        double_used = False
+        if wallet.double_card_available:
+            earned *= 2
+            double_used = True
+            wallet.double_card_available = False
+
+        # Deduct spin cost
+        wallet.coins -= SPIN_COST
+        wallet.save()
+
+        CoinTransactionLog.objects.create(
+            user=user,
+            amount=-SPIN_COST,
+            balance_after=wallet.coins,
+            campaign=campaign,
+            source="spin_cost",
+            description="Deducted 5 coins for spinning"
+        )
+
+        # Add reward
+        wallet.coins += earned
+        wallet.save()
+
+        CoinTransactionLog.objects.create(
+            user=user,
+            amount=earned,
+            balance_after=wallet.coins,
+            campaign=campaign,
+            source="jackpot" if is_jackpot else "spin_reward",
+            description=f"Earned {earned} coins from Lucky Spin{' (doubled)' if double_used else ''}"
+        )
+
+        # Log spin
+        Spin.objects.create(
+            user=user,
+            campaign=campaign,
+            coins_earned=earned,
+            doubled=double_used,
+            double_card_used=double_used,
+        )
+
+        # Epic spin push
+        if earned >= 15:
+            tokens = TokenFCM.objects.filter(user=user).values_list("token", flat=True)
+            if tokens:
+                push_data = {
+                    "campaign_title": "🔥 Epic Spin!",
+                    "campaign_message": f"You earned {earned} coins in one spin!",
+                    "screen": "lucky_spin",
+                    "type": "epic_spin",
+                    "id": user.id,
+                }
+                send_push_notification(tokens, push_data)
+
+        return Response({
+            "earned": earned,
+            "double_used": double_used,
+            "spin_cost": SPIN_COST,
+            "before_balance": before_balance,
+            "after_balance": wallet.coins,
+            "net_change": wallet.coins - before_balance,
+            "new_balance": wallet.coins,
+            "spins_today": today_spin_count + 1,
+            "spins_remaining": max(0, 30 - (today_spin_count + 1)),
+            "is_jackpot": is_jackpot,
+        })
+
+
+
+        
+
+    @action(detail=True, methods=['post'])
+    def cut(self, request, pk=None):
+        task = self.get_object()
+        result = perform_cut(task, request.user, request.data)
+
+        if isinstance(result, tuple):
+            data, status_code = result
+        else:
+            data, status_code = result, 200
+
+        log_user_event(user=request.user, event_name="cut", metadata={"task_id": task.id})
+        return Response(data, status=status_code)
+    
+    @action(detail=True, methods=['post'])
+    def redeem(self, request, pk=None):
+        task = self.get_object()
+        result, status_code = redeem_reward(task, request.user)
+        return Response(result, status=status_code)
+
+
 
     @action(detail=True, methods=['post'])
     def generate_invite_code(self, request, pk=None):
         task = self.get_object()
-        referral, _ = Referral.objects.get_or_create(user=task.user)
 
+        # Get or create the referral for the user + campaign
+        referral, _ = LuckyReferral.objects.get_or_create(user=task.user, campaign=task.campaign)
+
+        # Generate unique code
         code = str(uuid.uuid4())[:8]
-        invite = InviteCodes.objects.create(
-            refer=referral,
-            code=code
+
+        # Create invite with the referral instance
+        invite = LuckyInviteCodes.objects.create(
+            refer=referral,  # Use the instance, not the class
+            code=code,
+            status=LuckyInviteCodes.STATUS.PENDING
         )
 
-        # Firebase Dynamic Link (update domain to your own Firebase one)
-        base_dynamic_link = "https://hungrytiger.page.link"
-        deep_link = f"https://www.hungry-tiger.com/spin?invite={code}"
+        # Generate and attach Firebase/Branch link (your custom function)
+        invite_link = generate_branch_link(code)
+        invite.firebase_link = invite_link
+        invite.save(update_fields=["firebase_link"])
 
-        params = {
-            "link": deep_link,
-            "apn": "com.chatchefs.mealmingle",  # Android package
-            "afl": "https://play.google.com/store/apps/details?id=com.chatchefs.mealmingle",
-            "st": "Join Lucky Spin 🎉",
-            "sd": f"{task.user.first_name} invited you to spin and win rewards!",
-        }
-
-        firebase_link = f"{base_dynamic_link}/?{urlencode(params)}"
+        # Log the referral event
+        log_user_event(user=task.user, event_name="referral_shared", metadata={"code": code})
 
         return Response({
             "invite_code": code,
-            "invite_link": firebase_link,
-            "message": f"{task.user.first_name} invited you to win prizes! Join now using this code: {code}"
+            "invite_link": invite_link,
+            "message": f"{task.user.first_name} invited you to win prizes! Use the link below to join.",
         })
+    
+
+    @action(detail=True, methods=["get"])
+    def status(self, request, pk=None):
+        task = self.get_object()
+        user = task.user
+
+        # Total coins used in system boost
+        total_coins = CampaignProgressLog.objects.filter(task=task).aggregate(
+            total=Sum("coin_amount")
+        )["total"] or 0
+
+        # Determine progress state
+        boost_complete = task.task_progress_fake >= 0.9998
+        current_stage = "invite" if boost_complete else "system_boost"
+        almost_there = 0.9990 <= task.task_progress_fake < 0.9998
+
+        # Last progress update time
+        last_log = CampaignProgressLog.objects.filter(task=task).order_by("-created_at").first()
+        last_progress_time = last_log.created_at if last_log else None
+
+        # Wallet
+        wallet, _ = CoinWallet.objects.get_or_create(user=user, campaign=task.campaign)
+
+
+        # Remaining manual cuts (limit: 20/day)
+        today = timezone.now().date()
+        cut_count = Cut.objects.filter(task=task, created_at__date=today).count()
+        cuts_remaining = max(0, 20 - cut_count)
+
+        return Response({
+            "task_id": task.id,
+            "campaign_id": task.campaign.id,
+            "user_id": user.id,
+
+            # Progress info
+            "current_stage": current_stage,
+            "progress_percentage": round(task.task_progress_fake * 100, 4),
+            "boost_complete": boost_complete,
+            "show_almost_there_message": almost_there,
+
+            # Action permissions
+            "can_cut": boost_complete and cuts_remaining > 0,
+            "can_exchange": boost_complete,
+            # "cuts_remaining": cuts_remaining,
+
+            # Wallet info
+            "wallet_balance": wallet.coins,
+            "double_card_available": wallet.double_card_available,
+
+            # Items (from JSONField)
+            "item_inventory": task.item_inventory,
+
+            # Log info
+            "total_coins_used_for_boost": total_coins,
+            "progress_last_updated_at": last_progress_time,
+        })
+
 
     @action(detail=True, methods=['post'])
     def exchange(self, request, pk=None):
         task = self.get_object()
-        from_item = request.data.get("from")
-        to_item = request.data.get("to")
+        from_item = request.data.get("from_item")
+        to_item = request.data.get("to_item")
         amount = request.data.get("amount")
 
         result, status_code = perform_exchange(task, from_item, to_item, amount)
+
+        if status_code == 200:
+            log_user_event(user=task.user, event_name="item_exchanged", metadata={
+                "from": from_item,
+                "to": to_item,
+                "amount": amount
+            })
+
+        
         return Response(result, status=status_code)
+    
 
 
-# services.py
+    @action(detail=True, methods=["get"])
+    def check_ready(self, request, pk=None):
+        task = self.get_object()
+        campaign = task.campaign
+
+        # Step 1: Check item thresholds
+        inventory = task.item_inventory or {}
+        missing_items = {}
+        has_all_items = True
+
+        redeemed_items = task.redeemed_items or []
 
 
-def send_push_notification(user, data):
-    tokens = list(TokenFCM.objects.filter(user=user).values_list("token", flat=True))
-    if tokens:
-        from core.utils import send_push_notification as fcm_send
-        fcm_send(tokens, data)
+        for item, threshold in campaign.item_thresholds.items():
+            # If item already redeemed, skip checking
+            if item in redeemed_items:
+                continue
+
+            current = inventory.get(item, 0)
+            if current < threshold:
+                has_all_items = False
+                missing_items[item] = threshold - current
+
+
+        # Step 2: Check referral requirement
+        required_referrals = getattr(campaign, 'required_referrals', 1)
+        referral = LuckyReferral.objects.filter(user=task.user).first()
+        joined_count = referral.joined_users.count() if referral else 0
+        real_progress_done = joined_count >= required_referrals
+
+        # Step 3: Final eligibility
+        can_redeem = has_all_items and real_progress_done
+
+        if can_redeem:
+            message = "You're ready to redeem!"
+        elif not has_all_items:
+            message = "Collect all required items to redeem."
+        else:
+            message = f"Invite {required_referrals - joined_count} more friend(s) to redeem!"
+
+        return Response({
+            "has_all_items": has_all_items,
+            "real_progress_done": real_progress_done,
+            "can_redeem": can_redeem,
+            "joined_count": joined_count,
+            "required_referrals": required_referrals,
+            "redeemed_items": task.redeemed_items or [],
+
+            "message": message,
+            "missing_items": missing_items
+        })
+
+    @action(detail=True, methods=["patch"])
+    def force_complete(self, request, pk=None):
+        task = self.get_object()
+        task.task_progress_real = 100
+        task.task_progress_fake = 0.9999
+        task.is_completed = True
+        task.save()
+
+        log_user_event(user=task.user, event_name="admin_force_completed", metadata={
+            "task_id": task.id
+        })
+
+        return Response({"message": "Task marked as completed"})
+
+    def get_task(self, pk):
+        try:
+            return Task.objects.select_related("campaign", "user").get(pk=pk)
+        except Task.DoesNotExist:
+            raise NotFound("Task not found")
 
 
 def perform_cut(task, user, data):
-    is_new_user = data.get('is_new_user', False)
-    real_contribution = 10 if is_new_user else 2
+    print(f"🚀 Cut triggered by {user.email} on task {task.id} for campaign {task.campaign.id}")
 
-    task.task_progress_real += real_contribution
-    task.task_progress_fake = min(task.task_progress_real * 0.9 + 3, 99)
+    is_manual = data.get('is_manual', False)
+    is_new_user = data.get('is_new_user', False)
+    inviter = task.user
+
+    # 1. Manual cut limit check (with coin extension)
+    MAX_DAILY_MANUAL_CUTS = 5
+    MAX_EXTRA_MANUAL_CUTS = 2
+    EXTRA_MANUAL_CUT_COST = 10
+    MAX_TOTAL_MANUAL_CUTS = MAX_DAILY_MANUAL_CUTS + MAX_EXTRA_MANUAL_CUTS
+
+    start_of_day = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    manual_cuts_today = Cut.objects.filter(
+        cutter=user,
+        is_manual=True,
+        created_at__gte=start_of_day
+    ).count()
+
+    if is_manual and manual_cuts_today >= MAX_TOTAL_MANUAL_CUTS:
+        return {
+            "detail": "You've used all manual cuts for today, including 2 extra ones.",
+            "max_manual_cuts": MAX_TOTAL_MANUAL_CUTS,
+            "manual_cuts_used": manual_cuts_today,
+            "manual_cuts_left": 0
+        }, 429
+
+    # Use coins if extra cut
+    if is_manual and manual_cuts_today >= MAX_DAILY_MANUAL_CUTS:
+        wallet, _ = CoinWallet.objects.get_or_create(user=user, campaign=task.campaign)
+        if wallet.coins < EXTRA_MANUAL_CUT_COST:
+            return {"detail": "Not enough coins to unlock extra manual cut."}, 400
+
+        wallet.coins -= EXTRA_MANUAL_CUT_COST
+        wallet.save()
+
+        CoinTransactionLog.objects.create(
+            user=user,
+            amount=-EXTRA_MANUAL_CUT_COST,
+            balance_after=wallet.coins,
+            campaign=task.campaign,
+            source="extra_manual_cut",
+            description="Spent 10 coins for extra manual cut"
+        )
+
+    # 2. Prevent any further cuts after task complete
+    if task.task_progress_real >= 1.0:
+        return {"detail": "Task already completed."}, 400
+
+    # 3. Block self-cut unless manual
+    if inviter == user and not is_manual:
+        return {"detail": "Self-cut is not allowed."}, 400
+
+    # 4. Prevent multiple real cuts by same friend
+    if not is_manual and Cut.objects.filter(task=task, cutter=user, is_new_user=True).exists():
+        return {"detail": "You've already contributed to this task."}, 400
+
+    # 5. Progress Calculation
+    invite_goal = task.campaign.required_referrals or 30
+    real_contribution = Decimal("1.0") / Decimal(invite_goal) if is_new_user else Decimal("0.0")
+    fake_contribution = Decimal("0.02")
+
+    FAKE_PROGRESS_MAX = Decimal("0.9998")
+    REAL_PROGRESS_MAX = Decimal("1.0")
+
+    if is_manual:
+        task.task_progress_fake = min(task.task_progress_fake + fake_contribution, FAKE_PROGRESS_MAX)
+    else:
+        task.task_progress_real = min(task.task_progress_real + real_contribution, REAL_PROGRESS_MAX)
+        task.task_progress_fake = min(task.task_progress_real * Decimal("0.9") + Decimal("0.03"), FAKE_PROGRESS_MAX)
+
+    task.task_progress_real = min(task.task_progress_real, REAL_PROGRESS_MAX)
+    task.task_progress_fake = min(task.task_progress_fake, FAKE_PROGRESS_MAX)
+
+    # 6. Drop logic
+    if not task.campaign.drop_items:
+        return {"detail": "No drop items configured for this campaign"}, 400
 
     drop_item = task.current_drop_item or task.campaign.drop_items[0]
     drop_amount = 2 ** (task.drop_counter % 5)
 
-    inventory = task.item_inventory
+    inventory = task.item_inventory or {}
     inventory[drop_item] = inventory.get(drop_item, 0) + drop_amount
     task.item_inventory = inventory
 
+    # 7. Drop cycle switching
+    drop_cycle = task.campaign.drop_cycle or 5
     task.drop_counter += 1
-    if task.drop_counter % task.campaign.drop_cycle == 0:
-        next_index = (task.campaign.drop_items.index(drop_item) + 1) % len(task.campaign.drop_items)
+
+    if drop_cycle > 0 and task.drop_counter % drop_cycle == 0:
+        try:
+            current_index = task.campaign.drop_items.index(drop_item)
+        except ValueError:
+            current_index = 0
+        next_index = (current_index + 1) % len(task.campaign.drop_items)
         task.current_drop_item = task.campaign.drop_items[next_index]
 
     task.save()
 
+    # 8. Log the cut
     Cut.objects.create(
         task=task,
         cutter=user,
-        contribution=real_contribution,
+        contribution=real_contribution if not is_manual else 0,
         is_new_user=is_new_user,
+        is_manual=is_manual,
         item_dropped=drop_item,
         item_quantity=drop_amount
     )
 
-    # Trigger push/email notification if big drop or finished
-    if drop_amount >= 16 or task.task_progress_real >= 100:
-        message = f"🎉 {user.first_name} just got {drop_amount} {drop_item}!"
-        send_mail("Big Drop!", message, settings.DEFAULT_HUNGRY_TIGER_EMAIL, [user.email])
-        send_push_notification(user, {
-            "title": "🎉 Big Drop!",
-            "message": message,
-            "screen": "lucky_spin"
-        })
+    print(f"✅ Cut saved: user={user.email}, task={task.id}, contribution={real_contribution}, drop={drop_item}:{drop_amount}")
 
-    return BaseTaskSerializer(task).data
+    # 9. Log user event
+    log_user_event(user=user, event_name="item_dropped", metadata={
+        "task_id": task.id,
+        "item": drop_item,
+        "quantity": drop_amount
+    })
+
+    # 10. Manual cut stats
+    manual_cuts_used = manual_cuts_today + (1 if is_manual else 0)
+
+    response = {
+        "detail": "Cut successful",
+        "progress_real": float(round(task.task_progress_real * 100, 2)),
+        "progress_fake": float(round(task.task_progress_fake * 100, 2)),
+        "item_dropped": drop_item,
+        "quantity": drop_amount,
+        "new_inventory": task.item_inventory,
+        "task": BaseTaskSerializer(task).data,
+        "max_manual_cuts": MAX_DAILY_MANUAL_CUTS,
+        "manual_cuts_used": manual_cuts_used,
+        "manual_cuts_left": max(0, MAX_DAILY_MANUAL_CUTS - manual_cuts_used)
+    }
+
+    # 11. Send mail + push notification on big drop or 100%
+    if drop_amount >= 16 or task.task_progress_real >= 1.0:
+        message = f"🎉 {user.first_name} just got {drop_amount} {drop_item}!"
+        send_mail(
+            subject="Big Drop!",
+            message=message,
+            from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL,
+            recipient_list=[user.email],
+        )
+        tokens = list(TokenFCM.objects.filter(user=user).values_list("token", flat=True))
+        if tokens:
+            send_push_notification(tokens, {
+                "campaign_title": "🎁 Lucky Drop!",
+                "campaign_message": message,
+                "screen": "lucky_spin",
+                "type": "item_drop",
+                "id": user.id,
+            })
+
+    return response
 
 
 def redeem_reward(task, user):
     inventory = task.item_inventory or {}
     campaign = task.campaign
 
+    # ✅ Check referral progress
+    required_referrals = getattr(campaign, 'required_referrals', 1)
+    referral = LuckyReferral.objects.filter(user=user).first()
+    joined_count = referral.joined_users.count() if referral else 0
+
+    if joined_count < required_referrals:
+        return {
+            "detail": f"You must invite at least {required_referrals} friend(s) who sign up to unlock the reward.",
+            "joined_count": joined_count,
+            "required_referrals": required_referrals,
+        }, status.HTTP_400_BAD_REQUEST
+
+    # ✅ Check item thresholds
+    missing_items = {}
     for item, threshold in campaign.item_thresholds.items():
-        if inventory.get(item, 0) >= threshold:
-            with transaction.atomic():
-                inventory[item] -= threshold
-                task.item_inventory = inventory
-                task.save()
+        current = inventory.get(item, 0)
+        if current < threshold:
+            missing_items[item] = threshold - current
 
-                reward = RewardRedemption.objects.create(
-                    task=task,
-                    user=user,
-                    reward_value=campaign.reward_amount,
-                    item_used=item
-                )
-                return BaseRewardRedemptionSerializer(reward).data, status.HTTP_200_OK
+    if missing_items:
+        return {
+            "detail": "You have not collected all required items.",
+            "missing_items": missing_items,
+        }, status.HTTP_400_BAD_REQUEST
 
-    return {"detail": "Reward threshold not met"}, status.HTTP_400_BAD_REQUEST
+    # ✅ Deduct items and issue reward (atomic)
+    with transaction.atomic():
+        for item, threshold in campaign.item_thresholds.items():
+            inventory[item] -= threshold
 
-
-def perform_exchange(task, from_item, to_item, amount):
-    try:
-        amount = int(amount)
-        rate_key = f"{from_item}_to_{to_item}"
-        exchange_rate = task.campaign.exchange_rates.get(rate_key)
-
-        if not exchange_rate:
-            return {"detail": "Invalid exchange pair"}, status.HTTP_400_BAD_REQUEST
-
-        if task.item_inventory.get(from_item, 0) < amount:
-            return {"detail": f"Not enough {from_item}"}, status.HTTP_400_BAD_REQUEST
-
-        to_amount = int(amount * exchange_rate)
-        task.item_inventory[from_item] -= amount
-        task.item_inventory[to_item] = task.item_inventory.get(to_item, 0) + to_amount
+        task.item_inventory = inventory
         task.save()
 
-        return BaseTaskSerializer(task).data, status.HTTP_200_OK
+        reward = RewardRedemption.objects.create(
+            task=task,
+            user=user,
+            reward_value=campaign.reward_amount,
+            item_used=", ".join(campaign.item_thresholds.keys())
+        )
 
-    except Exception:
-        return {"detail": "Invalid input"}, status.HTTP_400_BAD_REQUEST
+        log_user_event(user=user, event_name="reward_redeemed", metadata={
+            "task_id": task.id,
+            "reward": str(campaign.reward_amount),
+            "items_used": campaign.item_thresholds,
+        })
+        log_user_event(user=user, event_name="reward_claimed", metadata={
+            "task_id": task.id,
+            "reward": str(campaign.reward_amount),
+        })
+
+        return {
+            "detail": "Reward redeemed successfully",
+            "items_used": campaign.item_thresholds,
+            "reward_value": campaign.reward_amount,
+            "remaining_inventory": inventory,
+            "reward": BaseRewardRedemptionSerializer(reward).data
+        }, status.HTTP_200_OK
+
+
+from math import ceil
+from math import ceil
+
+def perform_exchange(task, from_item, to_item, amount):
+    campaign = task.campaign
+    inventory = task.item_inventory or {}
+
+    # Validate input
+    try:
+        amount = int(amount)
+    except (TypeError, ValueError):
+        return {"detail": "Invalid amount."}, 400
+
+    if from_item == to_item:
+        return {"detail": "Cannot exchange the same item."}, 400
+
+    if amount <= 0:
+        return {"detail": "Amount must be greater than 0."}, 400
+
+    if from_item not in inventory or inventory[from_item] < amount:
+        return {"detail": f"Not enough {from_item} to exchange."}, 400
+
+    # Get thresholds and exchange rate
+    threshold = campaign.item_thresholds.get(to_item)
+    if threshold is None:
+        return {"detail": f"No threshold set for item {to_item}."}, 400
+
+    current_to_count = inventory.get(to_item, 0)
+    delta = threshold - current_to_count
+
+    if delta <= 0:
+        return {"detail": f"{to_item} already meets or exceeds the threshold."}, 400
+
+    exchange_rates = campaign.exchange_rates or {}
+    key = f"{from_item}_to_{to_item}"
+    exchange_rate = exchange_rates.get(key)
+
+    if not exchange_rate:
+        return {"detail": f"No exchange rate defined for {from_item} → {to_item}."}, 400
+
+    needed_from = ceil(delta / exchange_rate)
+
+    if amount < needed_from:
+        return {"detail": f"You need at least {needed_from} {from_item} to complete exchange."}, 400
+
+    # Perform exchange
+    received_amount = int(amount * exchange_rate)
+    inventory[from_item] -= amount
+    inventory[to_item] = inventory.get(to_item, 0) + received_amount
+
+    # Reward unlock logic
+    unlocked = False
+    task.redeemed_items = task.redeemed_items or []
+    
+    if inventory[to_item] >= threshold and to_item not in task.redeemed_items:
+        unlocked = True
+        task.redeemed_items.append(to_item)
+
+    task.item_inventory = inventory
+    task.save()
+
+    return {
+        "detail": "Exchange successful",
+        "from_item": from_item,
+        "to_item": to_item,
+        "amount_spent": amount,
+        "amount_received": received_amount,
+        "inventory": inventory,
+        "reward_unlocked": unlocked,
+        "unlocked_item": to_item if unlocked else None
+    }, 200
+
+

@@ -450,16 +450,17 @@ class NotificationLog(models.Model):
 
 
 class Campaign(models.Model):
-    name = models.CharField(max_length=255)
-    reward_amount = models.DecimalField(max_digits=10, decimal_places=2)  # e.g. 600.00
-    target_cac = models.DecimalField(max_digits=10, decimal_places=2)  # Target cost per acquisition
-    completion_rate_base = models.FloatField(default=1.0)  # θₙ
-    cut_decay_alpha = models.FloatField(default=0.95)  # α
-    cut_decay_beta = models.FloatField(default=0.85)   # β
-    drop_items = models.JSONField(default=list)  # ['diamond', 'coin', 'key', 'gold']
+    name = models.CharField(max_length=255)  # Name/title of the campaign (e.g., "Spin to Win ৳600")
+    reward_amount = models.DecimalField(max_digits=10, decimal_places=2)  # Amount of reward given when a task is completed (e.g., 600.00)
+    target_cac = models.DecimalField(max_digits=10, decimal_places=2)  #  Target cost per user acquisition (used in analytics)
+    completion_rate_base = models.FloatField(default=1.0)  # θₙ Base value used to normalize completion rates
+    cut_decay_alpha = models.FloatField(default=0.95)  # Decay factor for new users cutting (alpha)
+    cut_decay_beta = models.FloatField(default=0.85)   # Decay factor for existing users cutting (beta)
+    drop_items = models.JSONField(default=list)  #  List of items that can drop after cuts (e.g.,['diamond', 'coin', 'key', 'gold'])
     drop_cycle = models.IntegerField(default=5)  # rotate every N drops
     item_thresholds = models.JSONField(default=dict)  # e.g. {"diamond": 10, "coin": 20}
     exchange_rates = models.JSONField(default=dict)  # e.g. {"gold_to_diamond": 0.1}
+    required_referrals = models.IntegerField(default=1)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -472,12 +473,20 @@ class Campaign(models.Model):
 class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE)
-    task_progress_real = models.FloatField(default=0)
-    task_progress_fake = models.FloatField(default=0)
+    task_progress_real = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.0"))
+    task_progress_fake = models.DecimalField(max_digits=5, decimal_places=4, default=Decimal("0.0"))
     current_drop_item = models.CharField(max_length=100, blank=True, null=True)
+    redeemed_items = models.JSONField(default=list)
+
     drop_counter = models.IntegerField(default=0)
     item_inventory = models.JSONField(default=dict)
+    is_boosted = models.BooleanField(default=False)
+    is_completed = models.BooleanField(default=False)
+    stage = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Task: {self.user.email} - Campaign {self.campaign.id} - Completed: {self.is_completed}"
 
 class Cut(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
@@ -486,7 +495,11 @@ class Cut(models.Model):
     is_new_user = models.BooleanField(default=False)
     item_dropped = models.CharField(max_length=100)
     item_quantity = models.IntegerField()
+    is_manual = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Cut by {self.cutter.email} - {self.item_dropped} x{self.item_quantity} - New: {self.is_new_user}"
 
 class RewardRedemption(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
@@ -495,3 +508,96 @@ class RewardRedemption(models.Model):
     item_used = models.CharField(max_length=100)
     redeemed_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"Redemption by {self.user.email} - {self.reward_value}৳ via {self.item_used}"
+
+
+class CampaignProgressLog(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    coin_amount = models.IntegerField()
+    progress_before = models.FloatField()
+    progress_after = models.FloatField()
+    source = models.CharField(max_length=20)  # e.g., "system"
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.task.user.email} +{self.coin_amount} coins from {self.source} ({self.progress_before}->{self.progress_after})"
+
+class CoinWallet(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True)
+    coins = models.IntegerField(default=0)
+    double_card_available = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('user', 'campaign')  # prevent duplicates
+
+    def __str__(self):
+        return f"{self.user.email} has {self.coins} coins for {self.campaign.name}"
+
+class Spin(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True)
+    coins_earned = models.IntegerField()
+    doubled = models.BooleanField(default=False)
+    double_card_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Spin by {self.user.email}: +{self.coins_earned} coins (Doubled: {self.doubled})"
+  
+
+class CoinTransactionLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.SET_NULL, null=True, blank=True)  # optional link to campaign
+    amount = models.IntegerField()  # +50 (gain), -5 (spend), etc.
+    balance_after = models.IntegerField()  # wallet.coins after transaction
+    source = models.CharField(
+        max_length=50,
+        choices=[
+            ("spin_cost", "Spin Cost"),
+            ("spin_reward", "Spin Reward"),
+            ("jackpot", "Jackpot"),
+            ("welcome_bonus", "Welcome Bonus"),
+            ("reward_redemption", "Reward Redemption"),
+            ("manual_adjustment", "Manual Adjustment"),
+            ("event_bonus", "Event Bonus"),
+            ("referral_bonus", "Referral Bonus"),
+        ]
+    )
+    description = models.TextField(blank=True)  # optional: e.g., “Used for daily spin #5”
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+
+class LuckyReferral(BaseModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    invited_users = models.ManyToManyField(User, blank=True, related_name="lucky_invited_users")
+    joined_users = models.ManyToManyField(User, blank=True, related_name="lucky_joined_users")
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="lucky_referrals")
+
+    def __str__(self):
+        return f"Lucky Referral - {self.user.id} - Campaign {self.campaign.id}"
+    
+    class Meta:
+        unique_together = ('user', 'campaign') 
+
+
+class LuckyInviteCodes(models.Model):
+
+    class STATUS(models.TextChoices):
+        PENDING = "pending"
+        ACCEPTED = "accepted"
+
+    refer = models.ForeignKey(LuckyReferral, on_delete=models.CASCADE, related_name="lucky_invite_codes")
+    code = models.CharField(max_length=20, unique=True)
+    firebase_link = models.URLField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS.choices, default=STATUS.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.refer.user} - {self.code}"

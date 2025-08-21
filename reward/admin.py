@@ -61,3 +61,16 @@ class RetentionConfigAdmin(admin.ModelAdmin):
     search_fields = ('reward_group__name',)
     ordering = ('-created_at',)
     list_per_page = 50
+
+
+
+admin.site.register(Campaign)
+admin.site.register(Task)
+admin.site.register(Cut)
+admin.site.register(RewardRedemption)
+admin.site.register(CampaignProgressLog)
+admin.site.register(CoinWallet)
+admin.site.register(Spin)
+admin.site.register(CoinTransactionLog)
+admin.site.register(LuckyReferral)
+admin.site.register(LuckyInviteCodes)
