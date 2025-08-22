@@ -673,7 +673,7 @@ def lark_generate_invoice(request):
 
     return JsonResponse({"status": "queued", "module": "INVOICE", "started_at": timezone.now().isoformat()}, status=202)
 
-# ---------- Send API: takes emails, sends the saved PDF ----------
+
 
 # ---------- Send API: takes emails, sends the saved PDF ----------
 # === SEND INVOICE BY EMAIL (SendGrid via marketing.email_sender.send_email) ===
