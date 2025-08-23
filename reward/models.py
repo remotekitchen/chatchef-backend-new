@@ -437,14 +437,41 @@ class RetentionConfig(models.Model):
 
 
 
-class NotificationLog(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    tier = models.CharField(max_length=50)
-    channel = models.CharField(max_length=10)  # push / sms
-    message_content = models.TextField()
-    sent_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20)
 
+class NotificationLog(models.Model):
+    class Channel(models.TextChoices):
+        PUSH = "push", "push"
+        SMS  = "sms",  "sms"
+
+    class Status(models.TextChoices):
+        SENT    = "sent",    "sent"
+        FAILED  = "failed",  "failed"
+        SKIPPED = "skipped", "skipped"   # optional: e.g., rate-limited / already has coupon
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_index=True)
+    tier = models.CharField(max_length=50, db_index=True)
+
+    channel = models.CharField(
+        max_length=10, choices=Channel.choices, db_index=True
+    )
+
+    message_content = models.TextField()
+    message_id = models.CharField(max_length=128, null=True, blank=True)
+
+    # store UTC; we set it manually so we can log BD-local as well
+    sent_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    # BD-local for easy viewing (optional but handy)
+    sent_date_bd = models.DateField(null=True, blank=True, db_index=True)
+    sent_time_bd = models.TimeField(null=True, blank=True)
+
+    status = models.CharField(
+        max_length=20, choices=Status.choices, db_index=True
+    )
+    error_reason = models.TextField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-sent_at"]
 
 
 
