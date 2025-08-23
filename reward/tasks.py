@@ -315,96 +315,130 @@ def send_retention_coupons():
         print(f"❌ Retention coupon task failed: {str(e)}")
 
 
+from datetime import timedelta
+from django.utils import timezone
+from django.db.models import Q
+
 @shared_task
 def send_voucher_reminder_notifications():
-    today = timezone.now().date()
-    target_expiry_date = today + timedelta(days=2)
     now = timezone.now()
+    today = now.date()
+    target_expiry_date = today + timedelta(days=2)
 
-    vouchers = Voucher.objects.filter(
-        is_ht_voucher=True
-    )
+    # Config
+    USER_COOLDOWN_HOURS = 3  # gap between reminders to the same user
+    ACCOUNT_WINDOW_DAYS = 30 # only notify users who joined within last 30 days
+
+    # Platform coupons
+    vouchers = Voucher.objects.filter(is_ht_voucher=True)
+
+    # Pre-compute which vouchers are eligible to be reminded THIS RUN
+    expiring_vouchers = []
+    unlimited_vouchers = []
 
     for v in vouchers:
-        # Skip if redeemed
+        # If someone already used this voucher, don't remind for that voucher
+        # (we'll check per-user use again later to avoid spamming)
         if v.applied_users.exists():
             continue
 
-        expiry = get_voucher_expiry(v)
-        is_unlimited = expiry is None
+        expiry = get_voucher_expiry(v)  # None => unlimited
+        is_unlimited = (expiry is None)
 
-        send_reminder = False
-
+        should_send = False
         if not is_unlimited:
-            # Limited: send only if expires in 2 days and not notified
+            # Limited: remind only 2 days before expiry and only if not already notified
             if expiry == target_expiry_date and not v.notification_sent:
-                send_reminder = True
+                should_send = True
         else:
-            # Unlimited: send every 2 days
-            if not v.last_notification_sent_at:
-                send_reminder = True
-            else:
-                last_sent = v.last_notification_sent_at.date()
-                if (today - last_sent).days >= 2:
-                    send_reminder = True
+            # Unlimited: remind every 2 days globally
+            if not v.last_notification_sent_at or (today - v.last_notification_sent_at.date()).days >= 2:
+                should_send = True
 
-        if not send_reminder:
+        if should_send:
+            (expiring_vouchers if not is_unlimited else unlimited_vouchers).append((v, expiry))
+
+    if not expiring_vouchers and not unlimited_vouchers:
+        return  # nothing to do
+
+    # Users eligible: active AND joined within last 30 days
+    eligible_users = User.objects.filter(
+        is_active=True,
+        date_joined__gte=now - timedelta(days=ACCOUNT_WINDOW_DAYS)
+    )
+
+    for user in eligible_users:
+        # Cooldown check: ensure a gap between this and the user's last platform reminder
+        last_log = (
+            PlatformCouponExpiryLog.objects
+            .filter(user=user, source="platform")
+            .order_by("-sent_at")
+            .first()
+        )
+        if last_log and (now - last_log.sent_at) < timedelta(hours=USER_COOLDOWN_HOURS):
             continue
 
-        # Select active users (you can refine this to specific users if needed)
-        users = User.objects.filter(is_active=True)
-
-        tokens = []
-        user_map = {}
-
-        for user in users:
-            user_tokens = TokenFCM.objects.filter(user=user).values_list("token", flat=True)
-            if not user_tokens:
-                continue
-
-            for token in user_tokens:
-                tokens.append(token)
-                user_map[token] = user
-
+        # Get this user's device tokens
+        tokens = list(TokenFCM.objects.filter(user=user).values_list("token", flat=True))
         if not tokens:
             continue
 
-        # Prepare your data dictionary matching send_push_notification()
+        # Pick at most ONE voucher to notify for this user
+        chosen = None
+        chosen_expiry = None
+
+        # Prefer limited vouchers expiring in 2 days, not yet used by this user
+        for v, exp in expiring_vouchers:
+            if not v.applied_users.filter(id=user.id).exists():
+                chosen, chosen_expiry = v, exp
+                break
+
+        # Otherwise, try an unlimited voucher (again, skip if this user already used it)
+        if not chosen:
+            for v, exp in unlimited_vouchers:
+                if not v.applied_users.filter(id=user.id).exists():
+                    chosen, chosen_expiry = v, exp
+                    break
+
+        if not chosen:
+            continue  # nothing suitable for this user
+
+        # Compose push
+        is_unlimited = (chosen_expiry is None)
+        if is_unlimited:
+            message = f"Don’t forget to use coupon {chosen.voucher_code} (৳{int(chosen.amount)}). Tap to use it!"
+        else:
+            message = f"⏰ 48 hours left! Coupon {chosen.voucher_code} (৳{int(chosen.amount)}) expires soon. Tap to use it!"
+
         data = {
-            "campaign_title": "⏰ 48 Hours Left!",
-            "campaign_message": (
-                f"Your platform coupon '{v.voucher_code}' (৳{v.amount}) expires in 2 days. Tap to use it now!"
-                if not is_unlimited
-                else f"Don't forget to use your platform coupon '{v.voucher_code}' (৳{v.amount}). Tap to use it!"
-            ),
-            "campaign_image": "",  # You can set an image URL
+            "campaign_title": "Coupon Reminder",
+            "campaign_message": message,
             "campaign_category": "coupon",
             "campaign_is_active": "true",
             "restaurant_name": "",
             "screen": "coupons",
-            "id": str(v.id)
+            "id": str(chosen.id),
         }
 
-        # Call your notification function
         resp = send_push_notification(tokens, data)
 
-        # Update Voucher fields
+        # Update voucher (global) timestamps/flags similar to your original behavior
         if not is_unlimited and resp.get("successful", 0) > 0:
-            v.notification_sent = True
+            chosen.notification_sent = True
+        chosen.last_notification_sent_at = now
+        chosen.save(update_fields=["notification_sent", "last_notification_sent_at"])
 
-        v.last_notification_sent_at = now
-        v.save(update_fields=["notification_sent", "last_notification_sent_at"])
-
-        # Log per user
+        # Log per token (as you did), capturing success/fail
         for token in tokens:
-            user = user_map[token]
             PlatformCouponExpiryLog.objects.create(
                 user=user,
-                voucher=v,
-                coupon_code=v.voucher_code,
-                coupon_value=v.amount,
-                expiry_date=expiry,
+                voucher=chosen,
+                coupon_code=chosen.voucher_code,
+                coupon_value=chosen.amount,
+                expiry_date=chosen_expiry,
                 sent_at=now,
                 status="success" if token not in resp.get("invalid_tokens", []) else "failed",
-                source="platform"
+                source="platform",
             )
+
+        # ✅ IMPORTANT: we send only ONE voucher per user per run (and cooldown throttles future runs)

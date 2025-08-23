@@ -372,6 +372,16 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
                 # Non-retention: treat as platform/generic voucher
                 voucher_kind = "generic"
 
+                # ✅ NEW: platform coupons (is_ht_voucher) only valid within 30 days of signup
+                from datetime import timedelta
+                if getattr(voucher, "is_ht_voucher", False):
+                    cutoff = user.date_joined + timedelta(days=30)
+                    if timezone.now() > cutoff:
+                        return Response(
+                            {"error": "Platform coupons are only valid within 30 days of signup."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
             # Common usage limits
             if voucher.is_one_time_use and Order.objects.filter(voucher=voucher).exists():
                 return Response({"error": "This voucher has already been used."}, status=status.HTTP_400_BAD_REQUEST)
