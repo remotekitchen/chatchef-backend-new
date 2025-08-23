@@ -38,3 +38,4 @@ urlpatterns = [
     path('local-deal/<int:pk>/', LocalDealViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='local-deal-id'),
     path('reward/issue/', IssueRewardAPIView.as_view(), name='issue-reward'),
 ]
+urlpatterns += router.urls

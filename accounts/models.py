@@ -345,6 +345,9 @@ class UserEvent(models.Model):
         ('push_clicked', 'Push Clicked'),
         ('spin_invite_clicked', 'Spin Invite Clicked'),
         ('spin_install', 'Spin Install'),
+         ('cut', 'Cut'),
+            ('reward_redeemed', 'Reward Redeemed'),
+             ('item_exchanged', 'Item Exchanged'),
         ('deal_clicked', 'Deal Clicked'),
         ('deal_ordered', 'Deal Ordered'),
     ]
