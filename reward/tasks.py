@@ -20,7 +20,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
+from datetime import datetime
 
 
 @shared_task(name="chatchef.send_on_time_reward_notification")
@@ -32,11 +32,21 @@ def send_on_time_reward_notification(user_id, reward_amount, code=None, expiry_d
         user = User.objects.get(id=user_id)
         tokens = TokenFCM.objects.filter(user_id=user_id).values_list("token", flat=True)
 
+        exp_raw = str(expiry_date) if expiry_date else None
+        if exp_raw:
+            try:
+                exp_fmt = datetime.fromisoformat(exp_raw).strftime("%b %d, %Y")  # e.g., "Aug 31, 2025"
+            except Exception:
+                exp_fmt = exp_raw
+        else:
+            exp_fmt = None
+
         # FCM payload
         data = {
             "campaign_title": "🎁 Delivery Delay Reward!",
           "campaign_message": (
                 f"৳{reward_amount} has been credited to your account due to a delivery delay. "
+                f"{f'Expires {exp_fmt}. ' if exp_fmt else ''}"
                 "It will be automatically deducted from your next order!"
             ),
             "screen": "rewards",
@@ -54,18 +64,18 @@ def send_on_time_reward_notification(user_id, reward_amount, code=None, expiry_d
             logger.warning(f"⚠️ No FCM tokens found for user {user_id}")
 
         # Optional email
-        # if user.email:
-        #     subject = "You've received a delivery delay reward!"
-        #     template = "email/on_time_coupon.html"  # Create this if you want
-        #     context = {
-        #         "user": user,
-        #         "discount_amount": reward_amount,
-        #         "coupon_code": code,
-        #         "expiry_date": expiry_date,
-        #     }
+        if user.email:
+            subject = "You've received a delivery delay reward!"
+            template = "email/on_time_coupon.html"  # Create this if you want
+            context = {
+                "user": user,
+                "discount_amount": reward_amount,
+                "coupon_code": code,
+                "expiry_date": expiry_date,
+            }
 
-        #     send_email(subject, template, context, [user.email], from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL)
-        #     logger.info(f"✅ Email sent to {user.email}")
+            send_email(subject, template, context, [user.email], from_email=settings.DEFAULT_HUNGRY_TIGER_EMAIL)
+            logger.info(f"✅ Email sent to {user.email}")
 
     except User.DoesNotExist:
         logger.error(f"❌ User with ID {user_id} not found.")
