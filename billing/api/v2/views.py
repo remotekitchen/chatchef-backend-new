@@ -43,6 +43,16 @@ from decimal import Decimal, ROUND_HALF_UP
 
 logger = get_logger()
 
+
+from zoneinfo import ZoneInfo
+from django.db.models import Q
+
+# ----- Bangladesh time helpers -----
+BD_TZ = ZoneInfo("Asia/Dhaka")
+
+def bd_now():
+    """Return tz-aware Bangladesh local time (Django will store it in UTC)."""
+    return timezone.now().astimezone(BD_TZ)
 class CreateQuoteAPIView(BaseDoordashCreateQuoteAPIView):
     serializer_class = CreateQuoteSerializer
 
@@ -319,6 +329,72 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
         else:
             data["on_time_guarantee_opted_in"] = False
             data["on_time_guarantee_fee"] = 0
+
+        # ---- Voucher resolution: enforce retention ownership ----
+        voucher_code = (data.get("voucher") or "").strip()
+        voucher = None
+        voucher_kind = None  # "retention" or "generic"
+
+        if voucher_code:
+            # Find the voucher by code, once
+            voucher = (
+                Voucher.objects
+                .select_related("reward", "reward__reward_group")
+                .filter(voucher_code=voucher_code)
+                .first()
+            )
+            if not voucher:
+                return Response({"error": "Invalid voucher code."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # If this voucher belongs to the Retention Campaign, it must belong to THIS user
+            rg = getattr(getattr(voucher, "reward", None), "reward_group", None)
+            if rg and getattr(rg, "name", "") == "Retention Campaign":
+                voucher_kind = "retention"
+
+                today_bd = bd_now().date()
+                user_reward = (
+                    UserReward.objects
+                    .filter(
+                        user=user,
+                        reward=voucher.reward,
+                        code=voucher_code,
+                        is_claimed=False,
+                    )
+                    .filter(Q(expiry_date__isnull=True) | Q(expiry_date__gte=today_bd))
+                    .first()
+                )
+                if not user_reward:
+                    return Response(
+                        {"error": "This coupon is not available for your account or has expired."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:
+                # Non-retention: treat as platform/generic voucher
+                voucher_kind = "generic"
+
+                # ✅ NEW: platform coupons (is_ht_voucher) only valid within 30 days of signup
+                from datetime import timedelta
+                if getattr(voucher, "is_ht_voucher", False):
+                    cutoff = user.date_joined + timedelta(days=30)
+                    if timezone.now() > cutoff:
+                        return Response(
+                            {"error": "Platform coupons are only valid within 30 days of signup."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+            # Common usage limits
+            if voucher.is_one_time_use and Order.objects.filter(voucher=voucher).exists():
+                return Response({"error": "This voucher has already been used."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if voucher.max_uses and voucher.max_uses > 0:
+                usage_count = Order.objects.filter(user=user, voucher=voucher).count()
+                if usage_count >= voucher.max_uses:
+                    return Response(
+                        {"error": "You have already used this voucher the maximum allowed times."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+        # ---------------------------------------------------------
+
         
         cost_fields = self.get_costs(
             data=data, delivery_fee=fee, delivery_platform=delivery_platform, on_time_guarantee_fee=on_time_guarantee_fee,user=user
@@ -329,26 +405,26 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
         print("voucher_code",voucher_code)
 
         # Check if the voucher code is already used
-        if voucher_code:
-            voucher = Voucher.objects.filter(voucher_code=voucher_code).first()
-            print(voucher, 'voucher-----------------------------------> 7800000')
+        # if voucher_code:
+        #     voucher = Voucher.objects.filter(voucher_code=voucher_code).first()
+        #     print(voucher, 'voucher-----------------------------------> 7800000')
 
-            if not voucher:
-                return Response({"error": "Invalid voucher code."}, status=status.HTTP_400_BAD_REQUEST)
+        #     if not voucher:
+        #         return Response({"error": "Invalid voucher code."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Check one-time use (for all users)
-            if voucher.is_one_time_use:
-                if Order.objects.filter(voucher=voucher).exists():
-                    return Response({"error": "This voucher has already been used."}, status=status.HTTP_400_BAD_REQUEST)
-            print(voucher.max_uses, 'voucher.max_uses-----------------------------------> 7800')
-            # Check max use per user
-            if voucher.max_uses and voucher.max_uses > 0:
-                usage_count = Order.objects.filter(user=user, voucher=voucher).count()
-                print(usage_count, 'usage_count-----------------------------------> 7800')
-                if usage_count >= voucher.max_uses:
-                    return Response({"error": "You have already used this voucher the maximum allowed times."}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            voucher = None  # No voucher provided
+        #     # Check one-time use (for all users)
+        #     if voucher.is_one_time_use:
+        #         if Order.objects.filter(voucher=voucher).exists():
+        #             return Response({"error": "This voucher has already been used."}, status=status.HTTP_400_BAD_REQUEST)
+        #     print(voucher.max_uses, 'voucher.max_uses-----------------------------------> 7800')
+        #     # Check max use per user
+        #     if voucher.max_uses and voucher.max_uses > 0:
+        #         usage_count = Order.objects.filter(user=user, voucher=voucher).count()
+        #         print(usage_count, 'usage_count-----------------------------------> 7800')
+        #         if usage_count >= voucher.max_uses:
+        #             return Response({"error": "You have already used this voucher the maximum allowed times."}, status=status.HTTP_400_BAD_REQUEST)
+        # else:
+        #     voucher = None  # No voucher provided
 
         # Apply special HungryTiger discount
         if voucher and voucher.is_ht_voucher:
@@ -568,7 +644,32 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
 
             except Exception as error:
                 pass
+
+            # Mark retention coupon as claimed (single use), and record user on voucher
+            try:
+                if voucher_code:
+                    UserReward.objects.filter(
+                        user=user, code=voucher_code, is_claimed=False
+                    ).update(is_claimed=True)
+
+                    if voucher:
+                        voucher.applied_users.add(user)
+            except Exception:
+                pass
+
             order.save()
+
+            try:
+                if voucher_code and voucher_kind == "retention":
+                    UserReward.objects.filter(
+                        user=user, reward=voucher.reward, code=voucher_code, is_claimed=False
+                    ).update(is_claimed=True)
+
+                    if voucher:
+                        voucher.applied_users.add(user)
+            except Exception:
+                pass
+
 
 
             # "Traffic Monitoring"
@@ -695,6 +796,7 @@ class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
       
   
   
+    
     
 
 class OTPSendAPIView(BaseOTPSendAPIView):

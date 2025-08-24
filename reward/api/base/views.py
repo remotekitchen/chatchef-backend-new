@@ -555,6 +555,13 @@ def generate_random_string(length=8, include_numbers=True, include_punctuations=
     return ''.join(random.choices(chars, k=length))
 
 
+from datetime import timedelta
+from django.utils import timezone
+from django.db import transaction
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
 class BaseIssueRewardAPIView(APIView):
     def post(self, request, *args, **kwargs):
         print("call reward")
@@ -573,24 +580,35 @@ class BaseIssueRewardAPIView(APIView):
         except ValueError:
             return Response({"error": "Invalid reward amount"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ✅ Default: 14 days from now (date only)
         if not expiry_date:
-            expiry_date = (timezone.now() + timedelta(days=7)).date()
+            expiry_date = (timezone.now() + timedelta(days=14)).date()
+
+        # If a string came in (e.g. "2025-09-01"), keep it simple:
+        # try to parse to date; if parsing fails, keep as-is (DRF may already validate).
+        if isinstance(expiry_date, str):
+            try:
+                expiry_date = timezone.datetime.fromisoformat(expiry_date).date()
+            except Exception:
+                pass
 
         try:
             user = User.objects.get(id=user_id)
 
-            # ✅ Create or reuse reward group
+            # ✅ Use/reuse reward group; we don't set validity on the group anymore.
             reward_group, _ = RewardGroup.objects.get_or_create(
                 name="On-Time Delivery Guarantee",
-                applies_for=[RewardGroup.AppliesFor.DELIVERY],
-                validity_type=RewardGroup.ValidityType.DAYS_AFTER_REWARDED,
-                validity_days=7,
+                defaults={
+                    # Keep only applies_for; validity will be enforced via UserReward.expiry_date
+                    "applies_for": [RewardGroup.AppliesFor.DELIVERY],
+                },
             )
+            # If this field isn't a list/ArrayField in your model, adjust accordingly.
 
             # ✅ Generate tag from order_id
             extra_tag = f"on_time_reward_order_{order_id}" if order_id else None
 
-            # ✅ Prevent duplicate reward creation
+            # ✅ Prevent duplicate reward creation (active == unclaimed + not expired)
             existing_user_reward = UserReward.objects.filter(
                 user=user,
                 reward__reward_group=reward_group,
@@ -598,8 +616,11 @@ class BaseIssueRewardAPIView(APIView):
                 reward__reward_type=Reward.RewardType.COUPON,
                 is_claimed=False,
                 expiry_date__gte=timezone.now().date(),
-                code__icontains=extra_tag if extra_tag else "",
-            ).first()
+            )
+            if extra_tag:
+                existing_user_reward = existing_user_reward.filter(code__icontains=extra_tag)
+
+            existing_user_reward = existing_user_reward.first()
 
             if existing_user_reward:
                 return Response({
@@ -608,7 +629,7 @@ class BaseIssueRewardAPIView(APIView):
                 }, status=status.HTTP_200_OK)
 
             with transaction.atomic():
-                # ✅ Create reward
+                # ✅ Create reward (flat coupon)
                 reward = Reward.objects.create(
                     reward_group=reward_group,
                     reward_type=Reward.RewardType.COUPON,
@@ -616,27 +637,28 @@ class BaseIssueRewardAPIView(APIView):
                     amount=reward_amount,
                 )
 
-                # ✅ Attach AdditionalCondition
+                # ✅ Additional condition: minimum amount ৳50
                 AdditionalCondition.objects.create(
                     reward_group=reward_group,
                     condition_type=AdditionalCondition.ConditionType.MINIMUM_AMOUNT,
                     amount=50
                 )
 
-                # ✅ Generate reward code
+                # ✅ Generate reward code (include order tag if present)
                 base_code = generate_random_string(include_numbers=False, include_punctuations=False)
                 full_code = f"{base_code}_{extra_tag}" if extra_tag else base_code
 
-                # ✅ Create user reward
+                # ✅ Create user reward with 14-day validity
                 user_reward = UserReward.objects.create(
                     user=user,
                     reward=reward,
                     amount=reward_amount,
-                    expiry_date=expiry_date,
+                    expiry_date=expiry_date,   # <-- 14-day default handled above
                     is_claimed=False,
                     code=full_code,
                 )
-                # ✅ Create corresponding Voucher for order usage
+
+                # (Optional) If you still need a Voucher for other flows, uncomment:
                 # Voucher.objects.create(
                 #     reward=reward,
                 #     voucher_code=full_code,
@@ -648,19 +670,18 @@ class BaseIssueRewardAPIView(APIView):
                 #     is_ht_voucher=True,
                 #     ht_voucher_percentage_borne_by_restaurant=0,
                 #     max_uses=1,
-                
                 # )
 
-                # ✅ Assign reward_coupon to Order if provided
+                # ✅ Attach to order if provided
                 if order_id:
                     try:
                         order = Order.objects.get(id=order_id)
-                        order.reward_coupon = user_reward  # ✅ Fix: assign FK instance, not string
+                        order.reward_coupon = user_reward  # FK to UserReward
                         order.save(update_fields=["reward_coupon"])
                     except Order.DoesNotExist:
                         print(f"⚠️ Order with ID {order_id} not found")
 
-                # ✅ Trigger notification
+                # ✅ Notify after commit
                 def notify():
                     print("📨 Calling send_on_time_reward_notification task...")
                     send_on_time_reward_notification.delay(
@@ -682,6 +703,7 @@ class BaseIssueRewardAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         
 
 
