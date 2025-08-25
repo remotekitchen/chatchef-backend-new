@@ -210,66 +210,71 @@ class CostCalculationAPIView(BaseCostCalculationAPIView):
 
         platform = data.get("delivery_platform", "uber")
 
-        if platform == Order.DeliveryPlatform.RAIDER_APP:
+        # Normalize platform check so both enum and string work
+        is_raider = str(platform).lower() in {
+            getattr(Order.DeliveryPlatform, "RAIDER_APP", "raider_app").lower(),
+            "raider_app",
+        }
+
+        if is_raider:
             raider = DeliveryManager()
             quote = raider.create_quote(data=data)
 
+            # ✅ Robust handling for error string / bad types
+            if isinstance(quote, str):
+                # e.g. "We can not deliver to this address-2!"
+                raise ParseError(quote)
+
+            if not isinstance(quote, dict):
+                # Unexpected type from service
+                raise APIException("Delivery quote service returned an invalid response.")
+
+            # ✅ NEVER call .json() on a dict. Also handle friendly detail keys.
             if quote.get("status_code") != 200:
-                raise APIException(quote.json(), code=quote.get("status_code"))
+                detail = (
+                    quote.get("detail")
+                    or quote.get("message")
+                    or "We can not deliver to this address."
+                )
+                raise ParseError(detail)
 
-            # distance = quote.get("data", {}).get("distance")
-            # print("📏 Raider distance:", distance)
-
-            # Restaurant coordinates
+            # --- If we reached here, proceed to compute fee by distance ---
             restaurant_id = data.get("restaurant")
             restaurant = Restaurant.objects.get(id=restaurant_id)
             pickup_lat = restaurant.latitude
             pickup_lng = restaurant.longitude
 
-            # User coordinates from query params
-            # user_lat = self.request.query_params.get("lat")
-            # user_lng = self.request.query_params.get("lng")
             user_lat = data.get("lat")
             user_lng = data.get("lng")
-
-
             if not user_lat or not user_lng:
                 raise ParseError("Missing lat/lng in query parameters.")
 
-            # Haversine distance same as restaurant list
             distance = calculate_haversine_distance(
-                pickup_lat,
-                pickup_lng,
-                user_lat,
-                user_lng
+                pickup_lat, pickup_lng, user_lat, user_lng
             )
-
             if distance is None:
                 raise ParseError("Failed to calculate distance.")
 
-            print("📏 Haversine distance:", distance)
-
             try:
                 distance_km = float(distance)
-
-                # First 3 km free; after that, ৳10 per km (proportional), rounded to nearest taka (half-up)
                 extra_km = max(0.0, distance_km - 3.0)
-                fee = int((Decimal(str(extra_km)) * Decimal("10")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
-                print(f"Delivery fee (based on {distance_km:.2f} km) = {fee} Tk")
+                fee = int(
+                    (Decimal(str(extra_km)) * Decimal("10")).quantize(
+                        Decimal("1"), rounding=ROUND_HALF_UP
+                    )
+                )
                 return round(fee, 2), round(distance_km, 2)
             except (TypeError, ValueError):
                 raise ParseError("⚠️ Invalid delivery distance received for raider_app.")
 
+        # --- Doordash branch unchanged ---
         doordash = DoordashClient()
         quote = doordash.create_quote(data=data)
-
         if quote.status_code != 200:
             raise APIException(quote.json(), code=quote.status_code)
 
         fee = quote.json().get("fee", 0) / 100
         return round(fee, 2), None
-
 
 
 class RemotekitchenOrderAPIView(BaseRemotekitchenOrderAPIView):
